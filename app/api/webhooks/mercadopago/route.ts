@@ -137,7 +137,7 @@ async function handlePaymentNotification(paymentId: string, action?: string) {
       });
     } else if (paymentInfo.status === 'rejected' || paymentInfo.status === 'cancelled') {
       console.log(`Payment ${paymentInfo.status}. Cancelling purchase ${purchaseId}`);
-      await RaffleService.cancelPayment(purchaseId, `Payment ${paymentInfo.status}: ${paymentInfo.statusDetail}`);
+      await RaffleService.cancelPayment(purchaseId);
     } else {
       console.log(`Payment status: ${paymentInfo.status} - No action taken`);
     }
