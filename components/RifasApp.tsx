@@ -75,20 +75,18 @@ const apiService = {
   async getNumbers(): Promise<RaffleNumber[]> {
     try {
       const response = await fetch(`${API_BASE}/numbers`);
-      if (!response.ok) throw new Error('Error al cargar números');
-      return await response.json();
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error('API Error:', response.status, errorData);
+        throw new Error(`Error al cargar números: ${response.status}`);
+      }
+      const data = await response.json();
+      console.log('Numbers loaded from API:', data.length, 'numbers');
+      return data;
     } catch (error) {
       console.error('Error fetching numbers:', error);
-      // Fallback a datos simulados si falla la API
-      const numbers: RaffleNumber[] = [];
-      for (let i = 1; i <= 2000; i++) {
-        numbers.push({
-          id: i,
-          number: i,
-          status: 'available'
-        });
-      }
-      return numbers;
+      // Re-throw the error to handle it properly in the UI
+      throw error;
     }
   },
 
@@ -100,16 +98,17 @@ const apiService = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(purchaseData)
       });
-      if (!response.ok) throw new Error('Error al crear compra');
-      return await response.json();
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error('API Error:', response.status, errorData);
+        throw new Error(`Error al crear compra: ${response.status}`);
+      }
+      const data = await response.json();
+      console.log('Purchase created:', data);
+      return data;
     } catch (error) {
       console.error('Error creating purchase:', error);
-      // Fallback a simulación si falla
-      return {
-        success: true,
-        purchaseId: `PUR-${Date.now()}`,
-        reservationId: `RES-${Date.now()}`
-      };
+      throw error;
     }
   },
 
@@ -148,11 +147,16 @@ const useStore = () => {
     setLoading(true);
     setError(null);
     try {
+      console.log('Loading numbers from API...');
       const numbersData = await apiService.getNumbers();
+      console.log(`Loaded ${numbersData.length} numbers`);
+      const soldCount = numbersData.filter(n => n.status === 'sold').length;
+      console.log(`Sold numbers: ${soldCount}`);
       setNumbers(numbersData);
     } catch (err) {
-      setError('Error cargando números de rifa');
-      console.error(err);
+      setError('Error cargando números de rifa. Por favor recarga la página.');
+      console.error('Error loading numbers:', err);
+      // Don't set empty numbers on error to preserve existing data
     } finally {
       setLoading(false);
     }
