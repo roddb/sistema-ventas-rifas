@@ -516,18 +516,11 @@ const RifasApp = () => {
       currentPurchase.status = 'approved';
       currentPurchase.mercadoPagoPaymentId = `PAY-${Date.now()}`;
       
-      // Simular actualización de números en BD
-      const updatedNumbers = numbers.map(num => {
-        if (selectedNumbers.has(num.number)) {
-          return {
-            ...num,
-            status: 'sold' as const,
-            soldAt: new Date(),
-            purchaseId: currentPurchase.id
-          };
-        }
-        return num;
-      });
+      // Recargar números desde la BD para reflejar los cambios reales
+      await loadNumbers();
+      
+      // Limpiar números seleccionados
+      setSelectedNumbers(new Set());
       
       setCurrentStep('confirmation');
       setReservationTimer(0);

@@ -1,5 +1,5 @@
 import { db, schema } from '@/lib/db';
-import { eq, and, or, gte, lte, sql } from 'drizzle-orm';
+import { eq, and, or, gte, lte, sql, inArray } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 
 const { raffles, raffleNumbers, purchases, purchaseNumbers, eventLogs } = schema;
@@ -62,7 +62,7 @@ export class RaffleService {
         and(
           eq(raffleNumbers.raffleId, raffleId),
           eq(raffleNumbers.status, 'available'),
-          sql`${raffleNumbers.number} IN (${numberIds.join(',')})`
+          inArray(raffleNumbers.number, numberIds)
         )
       );
     
@@ -119,7 +119,7 @@ export class RaffleService {
       .where(
         and(
           eq(raffleNumbers.raffleId, data.raffleId),
-          sql`${raffleNumbers.number} IN (${data.numberIds.join(',')})`
+          inArray(raffleNumbers.number, data.numberIds)
         )
       );
     
@@ -130,7 +130,7 @@ export class RaffleService {
       .where(
         and(
           eq(raffleNumbers.raffleId, data.raffleId),
-          sql`${raffleNumbers.number} IN (${data.numberIds.join(',')})`
+          inArray(raffleNumbers.number, data.numberIds)
         )
       );
     
