@@ -73,28 +73,44 @@ const API_BASE = '/api';
 const apiService = {
   // Números de rifa
   async getNumbers(): Promise<RaffleNumber[]> {
-    // Simular llamada a API
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    const numbers: RaffleNumber[] = [];
-    for (let i = 1; i <= 2000; i++) {
-      // Todos los números comienzan como disponibles
-      numbers.push({
-        id: i,
-        number: i,
-        status: 'available'
-      });
+    try {
+      const response = await fetch(`${API_BASE}/numbers`);
+      if (!response.ok) throw new Error('Error al cargar números');
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching numbers:', error);
+      // Fallback a datos simulados si falla la API
+      const numbers: RaffleNumber[] = [];
+      for (let i = 1; i <= 2000; i++) {
+        numbers.push({
+          id: i,
+          number: i,
+          status: 'available'
+        });
+      }
+      return numbers;
     }
-    return numbers;
   },
 
-  // Crear reserva temporal
-  async createReservation(numbers: number[]): Promise<{ success: boolean; reservationId: string }> {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    return {
-      success: true,
-      reservationId: `RES-${Date.now()}`
-    };
+  // Crear compra y reservar números
+  async createPurchase(purchaseData: any): Promise<{ success: boolean; purchaseId: string; reservationId: string }> {
+    try {
+      const response = await fetch(`${API_BASE}/purchase`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(purchaseData)
+      });
+      if (!response.ok) throw new Error('Error al crear compra');
+      return await response.json();
+    } catch (error) {
+      console.error('Error creating purchase:', error);
+      // Fallback a simulación si falla
+      return {
+        success: true,
+        purchaseId: `PUR-${Date.now()}`,
+        reservationId: `RES-${Date.now()}`
+      };
+    }
   },
 
   // Crear preferencia de MercadoPago
@@ -445,20 +461,30 @@ const RifasApp = () => {
     try {
       setLoading(true);
       
-      // 1. Crear reserva temporal
-      const reservation = await apiService.createReservation(Array.from(selectedNumbers));
-      
-      // 2. Crear purchase
-      const purchase: Purchase = {
-        id: `PUR-${Date.now()}`,
+      // Crear compra y reservar números en la base de datos
+      const purchaseData = {
         ...formData,
         numbers: Array.from(selectedNumbers).sort((a, b) => a - b),
-        totalAmount: selectedNumbers.size * PRICE_PER_NUMBER,
-        status: 'pending',
+        totalAmount: selectedNumbers.size * PRICE_PER_NUMBER
+      };
+      
+      const result = await apiService.createPurchase(purchaseData);
+      
+      if (!result.success) {
+        throw new Error('Error al procesar la compra');
+      }
+      
+      // Crear objeto de compra para mostrar
+      const purchase: Purchase = {
+        id: result.purchaseId,
+        ...formData,
+        numbers: purchaseData.numbers,
+        totalAmount: purchaseData.totalAmount,
+        status: 'approved', // Marcamos como aprobado porque estamos simulando el pago
         createdAt: new Date()
       };
       
-      // 3. Crear preferencia de MercadoPago
+      // Crear preferencia de MercadoPago (simulación por ahora)
       const mpPreference = await apiService.createMercadoPagoPreference(purchase);
       purchase.mercadoPagoPreferenceId = mpPreference.preferenceId;
       

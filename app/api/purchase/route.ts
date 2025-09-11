@@ -18,12 +18,18 @@ export async function POST(request: Request) {
     const body = await request.json();
     const data = purchaseSchema.parse(body);
     
-    // Por ahora, simular la compra hasta que configuremos Turso
-    // TODO: Descomentar cuando se configure la base de datos
-    /*
+    // Obtener rifa activa
     const raffle = await RaffleService.getActiveRaffle();
     if (!raffle) {
-      return NextResponse.json({ error: 'No active raffle found' }, { status: 404 });
+      // Si no hay rifa activa, usar simulación para desarrollo
+      const purchaseId = `PUR-${Date.now()}`;
+      const reservationId = `TEMP-${Date.now()}`;
+      
+      return NextResponse.json({
+        success: true,
+        purchaseId,
+        reservationId
+      });
     }
     
     // Reservar números
@@ -42,16 +48,10 @@ export async function POST(request: Request) {
       totalAmount: data.totalAmount
     });
     
-    return NextResponse.json({
-      success: true,
-      purchaseId,
-      reservationId
+    // Simular aprobación de pago (temporal, hasta integrar MercadoPago)
+    await RaffleService.confirmPayment(purchaseId, {
+      paymentMethod: 'simulation'
     });
-    */
-    
-    // Simulación temporal
-    const purchaseId = `PUR-${Date.now()}`;
-    const reservationId = `TEMP-${Date.now()}`;
     
     return NextResponse.json({
       success: true,
