@@ -114,20 +114,32 @@ async function handlePaymentNotification(paymentId: string, action?: string) {
   console.log(`Handling payment notification: ${paymentId}, action: ${action}`);
   
   try {
-    // Aquí deberíamos:
-    // 1. Obtener detalles del pago desde la API de MercadoPago
-    // 2. Verificar el estado del pago
-    // 3. Actualizar nuestra base de datos
+    // Importamos las funciones necesarias
+    const { getPaymentInfo, isPaymentApproved } = await import('@/lib/mercadopago');
     
-    // Por ahora, simulamos el procesamiento
-    if (action === 'payment.created' || action === 'payment.updated') {
-      console.log(`Payment ${paymentId} was ${action}`);
-      
-      // TODO: Implementar cuando tengamos el cliente de MercadoPago
-      // const payment = await mercadopago.payment.get(paymentId);
-      // if (payment.status === 'approved') {
-      //   await RaffleService.confirmPayment(payment.external_reference);
-      // }
+    // 1. Obtener detalles del pago desde la API de MercadoPago
+    const paymentInfo = await getPaymentInfo(paymentId);
+    console.log('Payment details:', paymentInfo);
+    
+    // 2. Verificar el estado del pago
+    const purchaseId = paymentInfo.externalReference;
+    if (!purchaseId) {
+      console.error('No external reference (purchaseId) in payment');
+      return;
+    }
+    
+    // 3. Actualizar nuestra base de datos según el estado
+    if (paymentInfo.status === 'approved') {
+      console.log(`Payment approved! Confirming purchase ${purchaseId}`);
+      await RaffleService.confirmPayment(purchaseId, {
+        paymentMethod: paymentInfo.paymentMethod?.id || 'mercadopago',
+        mercadoPagoPaymentId: paymentId
+      });
+    } else if (paymentInfo.status === 'rejected' || paymentInfo.status === 'cancelled') {
+      console.log(`Payment ${paymentInfo.status}. Cancelling purchase ${purchaseId}`);
+      await RaffleService.cancelPayment(purchaseId, `Payment ${paymentInfo.status}: ${paymentInfo.statusDetail}`);
+    } else {
+      console.log(`Payment status: ${paymentInfo.status} - No action taken`);
     }
     
   } catch (error) {

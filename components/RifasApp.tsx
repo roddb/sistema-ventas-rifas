@@ -120,15 +120,32 @@ const apiService = {
     }
   },
 
-  // Crear preferencia de MercadoPago
-  async createMercadoPagoPreference(purchaseData: Partial<Purchase>): Promise<{ preferenceId: string; initPoint: string }> {
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
-    // Simular respuesta de MercadoPago
-    return {
-      preferenceId: `MP-${Date.now()}`,
-      initPoint: `https://sandbox.mercadopago.com.ar/checkout/v1/redirect?pref_id=MP-${Date.now()}`
-    };
+  // Crear preferencia de MercadoPago REAL
+  async createMercadoPagoPreference(purchaseData: Partial<Purchase>): Promise<{ preferenceId: string; initPoint: string; sandboxInitPoint: string }> {
+    try {
+      const response = await fetch(`${API_BASE}/preference`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          purchaseId: purchaseData.id,
+          buyerName: purchaseData.buyerName,
+          email: purchaseData.email,
+          numbers: purchaseData.numbers,
+          totalAmount: purchaseData.totalAmount
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Error creating payment preference');
+      }
+      
+      const data = await response.json();
+      console.log('MercadoPago preference created:', data);
+      return data;
+    } catch (error) {
+      console.error('Error creating MercadoPago preference:', error);
+      throw error;
+    }
   },
 
   // Confirmar pago
@@ -499,6 +516,42 @@ const RifasApp = () => {
     return () => clearInterval(interval);
   }, [loadNumbers]);
 
+  // Manejar retorno desde MercadoPago
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const paymentStatus = urlParams.get('payment');
+    const purchaseId = urlParams.get('purchase');
+    const paymentId = urlParams.get('payment_id');
+    
+    if (paymentStatus && purchaseId) {
+      console.log('Returning from MercadoPago:', { paymentStatus, purchaseId, paymentId });
+      
+      // Limpiar URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+      
+      // Procesar según el estado
+      if (paymentStatus === 'success') {
+        setPaymentStatus('approved');
+        setCurrentStep('confirmation');
+        // Limpiar selección
+        setSelectedNumbers(new Set());
+        // Recargar números para ver el estado actualizado
+        loadNumbers();
+      } else if (paymentStatus === 'failure') {
+        setPaymentStatus('rejected');
+        setCurrentStep('payment');
+        setError('El pago fue rechazado. Por favor, intenta nuevamente.');
+      } else if (paymentStatus === 'pending') {
+        setPaymentStatus('pending');
+        setCurrentStep('payment');
+        setError('El pago está pendiente de confirmación.');
+      }
+      
+      // Limpiar localStorage
+      localStorage.removeItem('currentPurchaseId');
+    }
+  }, [loadNumbers]);
+
   // Timer de reserva
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -588,7 +641,7 @@ const RifasApp = () => {
         createdAt: new Date()
       };
       
-      // Crear preferencia de MercadoPago (simulación por ahora)
+      // Crear preferencia de MercadoPago REAL
       const mpPreference = await apiService.createMercadoPagoPreference(purchase);
       purchase.mercadoPagoPreferenceId = mpPreference.preferenceId;
       
@@ -596,8 +649,12 @@ const RifasApp = () => {
       setCurrentStep('payment');
       setReservationTimer(RESERVATION_TIMEOUT);
       
-      // En producción, aquí redirigirías a MercadoPago
-      // window.location.href = mpPreference.initPoint;
+      // Guardar ID de compra para cuando vuelva de MercadoPago
+      localStorage.setItem('currentPurchaseId', purchase.id);
+      
+      // Redirigir a MercadoPago
+      console.log('Redirecting to MercadoPago checkout...');
+      window.location.href = mpPreference.initPoint;
       
     } catch (err) {
       setError('Error procesando la compra');
@@ -900,7 +957,7 @@ const RifasApp = () => {
           <>
             <Clock className="mx-auto mb-4 text-orange-500" size={48} />
             <h2 className="text-xl font-bold text-gray-800 mb-2">Esperando Pago</h2>
-            <p className="text-gray-600 mb-4">En producción serías redirigido a MercadoPago</p>
+            <p className="text-gray-600 mb-4">Preparando redirección a MercadoPago...</p>
             {reservationTimer > 0 && (
               <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-4">
                 <p className="text-sm text-orange-700">
@@ -937,22 +994,16 @@ const RifasApp = () => {
         </div>
       )}
 
-      {/* Botones de simulación para demo */}
+      {/* Integración con MercadoPago Real */}
       {paymentStatus === 'pending' && (
-        <div className="space-y-2">
-          <p className="text-sm text-gray-500 mb-4">Simulación para demo:</p>
-          <button
-            onClick={() => simulatePayment('approved')}
-            className="w-full bg-green-500 text-white py-2 px-4 rounded font-bold hover:bg-green-600 mb-2"
-          >
-            ✓ Simular Pago Exitoso
-          </button>
-          <button
-            onClick={() => simulatePayment('rejected')}
-            className="w-full bg-red-500 text-white py-2 px-4 rounded font-bold hover:bg-red-600"
-          >
-            ✗ Simular Pago Rechazado
-          </button>
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <p className="text-sm text-blue-700 mb-2">
+            <AlertCircle className="inline mr-1" size={14} />
+            Serás redirigido automáticamente a MercadoPago
+          </p>
+          <p className="text-xs text-blue-600">
+            Si la redirección no ocurre, recarga la página.
+          </p>
         </div>
       )}
     </div>
