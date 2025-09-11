@@ -597,8 +597,8 @@ const RifasApp = () => {
             <input
               type="text"
               value={formData.buyerName}
-              onChange={(e) => setFormData({...formData, buyerName: e.target.value})}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onChange={(e) => setFormData(prev => ({...prev, buyerName: e.target.value}))}
+              className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="Ej: María González"
               required
             />
@@ -612,8 +612,8 @@ const RifasApp = () => {
             <input
               type="text"
               value={formData.studentName}
-              onChange={(e) => setFormData({...formData, studentName: e.target.value})}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onChange={(e) => setFormData(prev => ({...prev, studentName: e.target.value}))}
+              className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="Ej: Juan González"
               required
             />
@@ -626,8 +626,8 @@ const RifasApp = () => {
             <input
               type="text"
               value={formData.division}
-              onChange={(e) => setFormData({...formData, division: e.target.value})}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onChange={(e) => setFormData(prev => ({...prev, division: e.target.value}))}
+              className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="Ej: A"
               required
             />
@@ -640,8 +640,8 @@ const RifasApp = () => {
             <input
               type="text"
               value={formData.course}
-              onChange={(e) => setFormData({...formData, course: e.target.value})}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onChange={(e) => setFormData(prev => ({...prev, course: e.target.value}))}
+              className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="Ej: 5to"
               required
             />
@@ -655,8 +655,8 @@ const RifasApp = () => {
             <input
               type="email"
               value={formData.email}
-              onChange={(e) => setFormData({...formData, email: e.target.value})}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onChange={(e) => setFormData(prev => ({...prev, email: e.target.value}))}
+              className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="ejemplo@gmail.com"
               required
             />
@@ -670,8 +670,8 @@ const RifasApp = () => {
             <input
               type="tel"
               value={formData.phone}
-              onChange={(e) => setFormData({...formData, phone: e.target.value})}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onChange={(e) => setFormData(prev => ({...prev, phone: e.target.value}))}
+              className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="11 1234 5678"
             />
           </div>
