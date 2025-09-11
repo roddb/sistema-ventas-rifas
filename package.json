@@ -1,0 +1,38 @@
+{
+  "name": "sistema-ventas-rifas",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "db:generate": "drizzle-kit generate:sqlite",
+    "db:migrate": "drizzle-kit push:sqlite",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "next": "14.2.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "@libsql/client": "^0.8.0",
+    "drizzle-orm": "^0.32.0",
+    "mercadopago": "^2.0.15",
+    "lucide-react": "^0.427.0",
+    "zod": "^3.23.8",
+    "nodemailer": "^6.9.14"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "@types/node": "^20.14.15",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@types/nodemailer": "^6.4.15",
+    "drizzle-kit": "^0.23.0",
+    "tailwindcss": "^3.4.7",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.41",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "14.2.5"
+  }
+}
