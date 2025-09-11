@@ -409,9 +409,17 @@ const RifasApp = () => {
   const PRICE_PER_NUMBER = 500;
   const RESERVATION_TIMEOUT = 15 * 60; // 15 minutos en segundos
 
-  // Cargar números al montar el componente
+  // Cargar números al montar el componente y actualizar periódicamente
   useEffect(() => {
     loadNumbers();
+    
+    // Actualizar números cada 30 segundos para reflejar cambios de otros usuarios
+    const interval = setInterval(() => {
+      console.log('Auto-refreshing numbers...');
+      loadNumbers();
+    }, 30000);
+    
+    return () => clearInterval(interval);
   }, [loadNumbers]);
 
   // Timer de reserva
@@ -520,11 +528,15 @@ const RifasApp = () => {
       currentPurchase.status = 'approved';
       currentPurchase.mercadoPagoPaymentId = `PAY-${Date.now()}`;
       
+      // Limpiar números seleccionados ANTES de recargar
+      setSelectedNumbers(new Set());
+      
       // Recargar números desde la BD para reflejar los cambios reales
+      console.log('Reloading numbers after payment...');
       await loadNumbers();
       
-      // Limpiar números seleccionados
-      setSelectedNumbers(new Set());
+      // Pequeño delay para asegurar que el estado se actualice
+      await new Promise(resolve => setTimeout(resolve, 100));
       
       setCurrentStep('confirmation');
       setReservationTimer(0);
@@ -534,7 +546,7 @@ const RifasApp = () => {
     }
   };
 
-  const resetApp = () => {
+  const resetApp = async () => {
     setSelectedNumbers(new Set());
     setCurrentStep('selection');
     setCurrentView('app');
@@ -549,7 +561,8 @@ const RifasApp = () => {
     setCurrentPurchase(null);
     setPaymentStatus('pending');
     setReservationTimer(0);
-    loadNumbers();
+    // Recargar números al volver a la selección
+    await loadNumbers();
   };
 
   // =========== NÚMERO GRID OPTIMIZADO (20x20) CON PAGINACIÓN ===========
