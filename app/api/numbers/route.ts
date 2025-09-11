@@ -23,7 +23,13 @@ export async function GET() {
     
     // Obtener números de la base de datos
     const numbers = await RaffleService.getRaffleNumbers(raffle.id);
-    return NextResponse.json(numbers);
+    return NextResponse.json(numbers, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
+    });
   } catch (error) {
     console.error('Error fetching numbers:', error);
     return NextResponse.json(

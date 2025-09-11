@@ -74,7 +74,15 @@ const apiService = {
   // Números de rifa
   async getNumbers(): Promise<RaffleNumber[]> {
     try {
-      const response = await fetch(`${API_BASE}/numbers`);
+      // Agregar timestamp para evitar cache del navegador
+      const timestamp = new Date().getTime();
+      const response = await fetch(`${API_BASE}/numbers?t=${timestamp}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
       if (!response.ok) {
         const errorData = await response.text();
         console.error('API Error:', response.status, errorData);
@@ -185,7 +193,7 @@ const useStore = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  const [purchases] = useLocalStorage<Purchase[]>('purchases', []);
+  const [purchases, setPurchases] = useState<Purchase[]>([]);
 
   const loadNumbers = useCallback(async () => {
     setLoading(true);
@@ -641,7 +649,8 @@ const RifasApp = () => {
     setCurrentPurchase(null);
     setPaymentStatus('pending');
     setReservationTimer(0);
-    // Recargar números al volver a la selección
+    // IMPORTANTE: Recargar números para sincronizar con BD
+    console.log('Reloading numbers after reset...');
     await loadNumbers();
   };
 
@@ -1160,13 +1169,23 @@ const RifasApp = () => {
                 Selecciona tus números de la suerte • {numbers.filter(n => n.status === 'sold').length}/2000 vendidos
               </p>
             </div>
-            <button
-              onClick={() => setCurrentView('admin')}
-              className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-900 flex items-center"
-            >
-              <Settings className="mr-1" size={16} />
-              Admin
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={loadNumbers}
+                disabled={loading}
+                className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 flex items-center disabled:opacity-50"
+              >
+                <RefreshCw className={`mr-1 ${loading ? 'animate-spin' : ''}`} size={16} />
+                Actualizar
+              </button>
+              <button
+                onClick={() => setCurrentView('admin')}
+                className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-900 flex items-center"
+              >
+                <Settings className="mr-1" size={16} />
+                Admin
+              </button>
+            </div>
           </div>
         </div>
       </header>

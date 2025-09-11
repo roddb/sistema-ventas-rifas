@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { RaffleService } from '@/lib/services/raffleService';
 import { z } from 'zod';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 const purchaseSchema = z.object({
   buyerName: z.string().min(1),
   studentName: z.string().min(1),

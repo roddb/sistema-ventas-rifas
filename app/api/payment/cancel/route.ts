@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { RaffleService } from '@/lib/services/raffleService';
 import { z } from 'zod';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 const cancelPaymentSchema = z.object({
   purchaseId: z.string().min(1),
   reason: z.string().optional().default('User cancelled or payment failed')
