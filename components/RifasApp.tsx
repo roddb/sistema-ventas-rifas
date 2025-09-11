@@ -1237,9 +1237,16 @@ const RifasApp = () => {
       <header className="bg-white shadow-lg">
         <div className="container mx-auto px-4 py-4">
           <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-800">
-                🎫 Rifa Escolar 2024
+            <div 
+              className="cursor-pointer"
+              onClick={() => {
+                setCurrentStep('selection');
+                setSelectedNumbers(new Set());
+                setShowAdminPanel(false);
+              }}
+            >
+              <h1 className="text-2xl font-bold text-gray-800 hover:text-blue-600 transition-colors">
+                🎫 Rifa Escolar 2025
               </h1>
               <p className="text-gray-600 mt-1">
                 Selecciona tus números de la suerte • {numbers.filter(n => n.status === 'sold').length}/{TOTAL_NUMBERS} vendidos
