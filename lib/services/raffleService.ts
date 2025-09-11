@@ -1,5 +1,5 @@
 import { db, schema } from '@/lib/db';
-import { eq, and, or, gte, lte, sql, inArray } from 'drizzle-orm';
+import { eq, and, or, gte, lte, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 
 const { raffles, raffleNumbers, purchases, purchaseNumbers, eventLogs } = schema;
@@ -50,27 +50,29 @@ export class RaffleService {
     const reservedAt = new Date();
     
     // Actualizar números a estado reservado
-    await db
-      .update(raffleNumbers)
-      .set({
-        status: 'reserved',
-        reservedAt,
-        purchaseId: reservationId,
-        updatedAt: new Date()
-      })
-      .where(
-        and(
-          eq(raffleNumbers.raffleId, raffleId),
-          eq(raffleNumbers.status, 'available'),
-          inArray(raffleNumbers.number, numberIds)
-        )
-      );
+    // Usamos un loop porque inArray puede no funcionar bien con Turso
+    for (const numberId of numberIds) {
+      await db
+        .update(raffleNumbers)
+        .set({
+          status: 'reserved',
+          reservedAt,
+          purchaseId: reservationId,
+          updatedAt: new Date()
+        })
+        .where(
+          and(
+            eq(raffleNumbers.raffleId, raffleId),
+            eq(raffleNumbers.status, 'available'),
+            eq(raffleNumbers.number, numberId)
+          )
+        );
+    }
     
-    // Log del evento
+    // Log del evento (sin purchaseId ya que es temporal)
     await db.insert(eventLogs).values({
       eventType: 'NUMBERS_RESERVED',
-      purchaseId: reservationId,
-      data: JSON.stringify({ numberIds, reservedAt })
+      data: JSON.stringify({ reservationId, numberIds, reservedAt })
     });
     
     return reservationId;
@@ -110,29 +112,35 @@ export class RaffleService {
     });
     
     // Actualizar números con el ID de compra real
-    await db
-      .update(raffleNumbers)
-      .set({
-        purchaseId,
-        updatedAt: new Date()
-      })
-      .where(
-        and(
-          eq(raffleNumbers.raffleId, data.raffleId),
-          inArray(raffleNumbers.number, data.numberIds)
-        )
-      );
+    for (const numberId of data.numberIds) {
+      await db
+        .update(raffleNumbers)
+        .set({
+          purchaseId,
+          updatedAt: new Date()
+        })
+        .where(
+          and(
+            eq(raffleNumbers.raffleId, data.raffleId),
+            eq(raffleNumbers.number, numberId)
+          )
+        );
+    }
     
     // Crear relaciones en purchase_numbers
-    const numberRecords = await db
-      .select()
-      .from(raffleNumbers)
-      .where(
-        and(
-          eq(raffleNumbers.raffleId, data.raffleId),
-          inArray(raffleNumbers.number, data.numberIds)
-        )
-      );
+    const numberRecords = [];
+    for (const numberId of data.numberIds) {
+      const [record] = await db
+        .select()
+        .from(raffleNumbers)
+        .where(
+          and(
+            eq(raffleNumbers.raffleId, data.raffleId),
+            eq(raffleNumbers.number, numberId)
+          )
+        );
+      if (record) numberRecords.push(record);
+    }
     
     for (const num of numberRecords) {
       await db.insert(purchaseNumbers).values({
@@ -214,7 +222,7 @@ export class RaffleService {
         )
       );
     
-    // Log del evento
+    // Log del evento (sin purchaseId)
     await db.insert(eventLogs).values({
       eventType: 'EXPIRED_RESERVATIONS_RELEASED',
       data: JSON.stringify({ 

@@ -16,10 +16,12 @@ const purchaseSchema = z.object({
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+    console.log('Purchase request received:', body);
     const data = purchaseSchema.parse(body);
     
     // Obtener rifa activa
     const raffle = await RaffleService.getActiveRaffle();
+    console.log('Active raffle:', raffle);
     if (!raffle) {
       // Si no hay rifa activa, usar simulación para desarrollo
       const purchaseId = `PUR-${Date.now()}`;
@@ -33,9 +35,12 @@ export async function POST(request: Request) {
     }
     
     // Reservar números
+    console.log('Reserving numbers:', data.numbers);
     const reservationId = await RaffleService.reserveNumbers(raffle.id, data.numbers);
+    console.log('Reservation ID:', reservationId);
     
     // Crear compra
+    console.log('Creating purchase...');
     const purchaseId = await RaffleService.createPurchase({
       raffleId: raffle.id,
       buyerName: data.buyerName,
@@ -60,6 +65,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error('Error creating purchase:', error);
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack');
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(
