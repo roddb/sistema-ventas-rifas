@@ -393,7 +393,7 @@ const RifasApp = () => {
 
     return (
       <div className="overflow-x-auto p-4">
-        <div className="grid gap-0.5" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+        <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${cols}, minmax(40px, 1fr))` }}>
           {Array.from({ length: rows * cols }, (_, index) => {
             const number = index + 1;
             const status = getNumberStatus(number);
@@ -403,7 +403,7 @@ const RifasApp = () => {
                 key={number}
                 onClick={() => toggleNumber(number)}
                 className={`
-                  w-7 h-7 text-xs font-bold rounded flex items-center justify-center
+                  w-10 h-10 text-xs font-bold rounded flex items-center justify-center
                   ${getNumberColor(status)}
                   ${status === 'sold' || status === 'reserved' ? '' : 'hover:shadow-lg'}
                 `}
