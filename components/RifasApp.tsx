@@ -822,15 +822,15 @@ const RifasApp = () => {
       {currentPurchase && (
         <div className="bg-green-50 p-4 rounded-lg mb-6 text-left">
           <h3 className="font-bold text-gray-800 mb-3">Detalles de tu compra:</h3>
-          <div className="space-y-2 text-sm">
-            <p><strong>ID:</strong> {currentPurchase.id}</p>
-            <p><strong>Comprador:</strong> {currentPurchase.buyerName}</p>
-            <p><strong>Estudiante:</strong> {currentPurchase.studentName}</p>
-            <p><strong>Curso:</strong> {currentPurchase.course} "{currentPurchase.division}"</p>
-            <p><strong>Números comprados:</strong> {currentPurchase.numbers.join(', ')}</p>
-            <p><strong>Total pagado:</strong> ${currentPurchase.totalAmount.toLocaleString('es-AR')}</p>
-            <p><strong>Método de pago:</strong> MercadoPago</p>
-            <p><strong>Fecha:</strong> {currentPurchase.createdAt.toLocaleDateString('es-AR')}</p>
+          <div className="space-y-2 text-sm text-gray-700">
+            <p className="text-gray-700"><strong className="text-gray-800">ID:</strong> {currentPurchase.id}</p>
+            <p className="text-gray-700"><strong className="text-gray-800">Comprador:</strong> {currentPurchase.buyerName}</p>
+            <p className="text-gray-700"><strong className="text-gray-800">Estudiante:</strong> {currentPurchase.studentName}</p>
+            <p className="text-gray-700"><strong className="text-gray-800">Curso:</strong> {currentPurchase.course} "{currentPurchase.division}"</p>
+            <p className="text-gray-700"><strong className="text-gray-800">Números comprados:</strong> {currentPurchase.numbers.join(', ')}</p>
+            <p className="text-gray-700"><strong className="text-gray-800">Total pagado:</strong> ${currentPurchase.totalAmount.toLocaleString('es-AR')}</p>
+            <p className="text-gray-700"><strong className="text-gray-800">Método de pago:</strong> MercadoPago</p>
+            <p className="text-gray-700"><strong className="text-gray-800">Fecha:</strong> {currentPurchase.createdAt.toLocaleDateString('es-AR')}</p>
           </div>
         </div>
       )}
