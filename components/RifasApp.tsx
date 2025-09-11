@@ -414,7 +414,7 @@ const RifasApp = () => {
               ← Anterior
             </button>
             
-            <span className="px-4 py-2 font-medium">
+            <span className="px-4 py-2 font-medium text-gray-700">
               Página {currentPage} de {totalPages}
             </span>
             
@@ -502,12 +502,12 @@ const RifasApp = () => {
       <div className="space-y-3">
         <div className="flex justify-between">
           <span className="text-gray-600">Números seleccionados:</span>
-          <span className="font-bold">{selectedNumbers.size}</span>
+          <span className="font-bold text-gray-800">{selectedNumbers.size}</span>
         </div>
         
         <div className="flex justify-between">
           <span className="text-gray-600">Precio por número:</span>
-          <span className="font-bold">${PRICE_PER_NUMBER.toLocaleString('es-AR')}</span>
+          <span className="font-bold text-gray-800">${PRICE_PER_NUMBER.toLocaleString('es-AR')}</span>
         </div>
         
         <div className="border-t pt-3 flex justify-between text-lg">
@@ -681,15 +681,15 @@ const RifasApp = () => {
           <h4 className="font-medium text-gray-800 mb-3">Resumen de Compra:</h4>
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
-              <span>Números seleccionados:</span>
-              <span className="font-medium">{selectedNumbers.size}</span>
+              <span className="text-gray-600">Números seleccionados:</span>
+              <span className="font-medium text-gray-800">{selectedNumbers.size}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span>Precio por número:</span>
-              <span className="font-medium">${PRICE_PER_NUMBER.toLocaleString('es-AR')}</span>
+              <span className="text-gray-600">Precio por número:</span>
+              <span className="font-medium text-gray-800">${PRICE_PER_NUMBER.toLocaleString('es-AR')}</span>
             </div>
             <div className="border-t pt-2 flex justify-between font-bold text-lg">
-              <span>Total:</span>
+              <span className="text-gray-800">Total:</span>
               <span className="text-green-600">${(selectedNumbers.size * PRICE_PER_NUMBER).toLocaleString('es-AR')}</span>
             </div>
             
@@ -972,19 +972,19 @@ const RifasApp = () => {
       <div className="flex flex-wrap gap-4 text-sm">
         <div className="flex items-center">
           <div className="w-4 h-4 bg-green-500 rounded mr-2"></div>
-          <span>Disponible</span>
+          <span className="text-gray-700">Disponible</span>
         </div>
         <div className="flex items-center">
           <div className="w-4 h-4 bg-blue-500 rounded mr-2 ring-2 ring-blue-300"></div>
-          <span>Seleccionado</span>
+          <span className="text-gray-700">Seleccionado</span>
         </div>
         <div className="flex items-center">
           <div className="w-4 h-4 bg-orange-400 rounded mr-2 opacity-70"></div>
-          <span>Reservado (temporal)</span>
+          <span className="text-gray-700">Reservado (temporal)</span>
         </div>
         <div className="flex items-center">
           <div className="w-4 h-4 bg-red-500 rounded mr-2 opacity-50"></div>
-          <span>Vendido</span>
+          <span className="text-gray-700">Vendido</span>
         </div>
       </div>
       
