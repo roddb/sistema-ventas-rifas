@@ -188,6 +188,180 @@ const useStore = () => {
 
 // =========== COMPONENTES ===========
 
+// Component definitions moved outside to prevent re-creation on each render
+interface PersonalDataFormProps {
+  formData: FormData;
+  setFormData: React.Dispatch<React.SetStateAction<FormData>>;
+  setCurrentStep: React.Dispatch<React.SetStateAction<'selection' | 'form' | 'payment' | 'confirmation'>>;
+  handleFormSubmit: () => void;
+  selectedNumbers: Set<number>;
+  PRICE_PER_NUMBER: number;
+  loading: boolean;
+}
+
+// PersonalDataForm component moved outside RifasApp to prevent re-creation
+const PersonalDataForm: React.FC<PersonalDataFormProps> = ({ 
+  formData, 
+  setFormData, 
+  setCurrentStep, 
+  handleFormSubmit, 
+  selectedNumbers, 
+  PRICE_PER_NUMBER,
+  loading 
+}) => {
+  const validateForm = () => {
+    const { buyerName, studentName, division, course, email } = formData;
+    return buyerName.trim() && studentName.trim() && division.trim() && course.trim() && email.trim();
+  };
+
+  return (
+    <div className="bg-white rounded-lg shadow-lg p-6 max-w-2xl mx-auto">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-xl font-bold text-gray-800 flex items-center">
+          <User className="mr-2" />
+          Datos Personales
+        </h2>
+        <button
+          onClick={() => setCurrentStep('selection')}
+          className="text-gray-500 hover:text-gray-700 p-1"
+        >
+          <X size={24} />
+        </button>
+      </div>
+
+      <form onSubmit={(e) => { e.preventDefault(); handleFormSubmit(); }}>
+        <div className="grid md:grid-cols-2 gap-4 mb-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Nombre completo del comprador *
+            </label>
+            <input
+              type="text"
+              value={formData.buyerName}
+              onChange={(e) => setFormData(prev => ({...prev, buyerName: e.target.value}))}
+              className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+              placeholder="Ej: María González"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+              <School className="mr-1" size={16} />
+              Nombre del hijo/a *
+            </label>
+            <input
+              type="text"
+              value={formData.studentName}
+              onChange={(e) => setFormData(prev => ({...prev, studentName: e.target.value}))}
+              className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+              placeholder="Ej: Juan González"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              División *
+            </label>
+            <input
+              type="text"
+              value={formData.division}
+              onChange={(e) => setFormData(prev => ({...prev, division: e.target.value}))}
+              className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+              placeholder="Ej: A"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Curso *
+            </label>
+            <input
+              type="text"
+              value={formData.course}
+              onChange={(e) => setFormData(prev => ({...prev, course: e.target.value}))}
+              className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+              placeholder="Ej: 5to"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+              <Mail className="mr-1" size={16} />
+              Email *
+            </label>
+            <input
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData(prev => ({...prev, email: e.target.value}))}
+              className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+              placeholder="ejemplo@gmail.com"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+              <Phone className="mr-1" size={16} />
+              Teléfono
+            </label>
+            <input
+              type="tel"
+              value={formData.phone}
+              onChange={(e) => setFormData(prev => ({...prev, phone: e.target.value}))}
+              className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+              placeholder="11 1234 5678"
+            />
+          </div>
+        </div>
+
+        <div className="bg-gray-50 p-4 rounded-lg mb-6">
+          <h4 className="font-medium text-gray-800 mb-3">Resumen de Compra:</h4>
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-600">Números seleccionados:</span>
+              <span className="font-medium text-gray-800">{selectedNumbers.size}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-600">Precio por número:</span>
+              <span className="font-medium text-gray-800">${PRICE_PER_NUMBER.toLocaleString('es-AR')}</span>
+            </div>
+            <div className="border-t pt-2 flex justify-between font-bold text-lg">
+              <span className="text-gray-800">Total:</span>
+              <span className="text-green-600">${(selectedNumbers.size * PRICE_PER_NUMBER).toLocaleString('es-AR')}</span>
+            </div>
+            
+            <div className="mt-3 max-h-20 overflow-y-auto">
+              <p className="text-xs text-gray-600 mb-1">Números: {Array.from(selectedNumbers).sort((a, b) => a - b).join(', ')}</p>
+            </div>
+          </div>
+        </div>
+
+        <button
+          type="submit"
+          disabled={!validateForm() || loading}
+          className="w-full bg-green-500 text-white py-3 px-4 rounded-lg font-bold hover:bg-green-600 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center"
+        >
+          {loading ? (
+            <>
+              <RefreshCw className="animate-spin mr-2" size={16} />
+              Procesando...
+            </>
+          ) : (
+            <>
+              <CreditCard className="mr-2" />
+              Proceder al Pago
+            </>
+          )}
+        </button>
+      </form>
+    </div>
+  );
+};
+
 const RifasApp = () => {
   const {
     selectedNumbers,
@@ -573,152 +747,7 @@ const RifasApp = () => {
     </div>
   );
 
-  const PersonalDataForm = () => (
-    <div className="bg-white rounded-lg shadow-lg p-6 max-w-2xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-bold text-gray-800 flex items-center">
-          <User className="mr-2" />
-          Datos Personales
-        </h2>
-        <button
-          onClick={() => setCurrentStep('selection')}
-          className="text-gray-500 hover:text-gray-700 p-1"
-        >
-          <X size={24} />
-        </button>
-      </div>
-
-      <form onSubmit={(e) => { e.preventDefault(); handleFormSubmit(); }}>
-        <div className="grid md:grid-cols-2 gap-4 mb-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Nombre completo del comprador *
-            </label>
-            <input
-              type="text"
-              value={formData.buyerName}
-              onChange={(e) => setFormData(prev => ({...prev, buyerName: e.target.value}))}
-              className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Ej: María González"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
-              <School className="mr-1" size={16} />
-              Nombre del hijo/a *
-            </label>
-            <input
-              type="text"
-              value={formData.studentName}
-              onChange={(e) => setFormData(prev => ({...prev, studentName: e.target.value}))}
-              className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Ej: Juan González"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              División *
-            </label>
-            <input
-              type="text"
-              value={formData.division}
-              onChange={(e) => setFormData(prev => ({...prev, division: e.target.value}))}
-              className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Ej: A"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Curso *
-            </label>
-            <input
-              type="text"
-              value={formData.course}
-              onChange={(e) => setFormData(prev => ({...prev, course: e.target.value}))}
-              className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Ej: 5to"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
-              <Mail className="mr-1" size={16} />
-              Email *
-            </label>
-            <input
-              type="email"
-              value={formData.email}
-              onChange={(e) => setFormData(prev => ({...prev, email: e.target.value}))}
-              className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="ejemplo@gmail.com"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
-              <Phone className="mr-1" size={16} />
-              Teléfono
-            </label>
-            <input
-              type="tel"
-              value={formData.phone}
-              onChange={(e) => setFormData(prev => ({...prev, phone: e.target.value}))}
-              className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="11 1234 5678"
-            />
-          </div>
-        </div>
-
-        <div className="bg-gray-50 p-4 rounded-lg mb-6">
-          <h4 className="font-medium text-gray-800 mb-3">Resumen de Compra:</h4>
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Números seleccionados:</span>
-              <span className="font-medium text-gray-800">{selectedNumbers.size}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Precio por número:</span>
-              <span className="font-medium text-gray-800">${PRICE_PER_NUMBER.toLocaleString('es-AR')}</span>
-            </div>
-            <div className="border-t pt-2 flex justify-between font-bold text-lg">
-              <span className="text-gray-800">Total:</span>
-              <span className="text-green-600">${(selectedNumbers.size * PRICE_PER_NUMBER).toLocaleString('es-AR')}</span>
-            </div>
-            
-            <div className="mt-3 max-h-20 overflow-y-auto">
-              <p className="text-xs text-gray-600 mb-1">Números: {Array.from(selectedNumbers).sort((a, b) => a - b).join(', ')}</p>
-            </div>
-          </div>
-        </div>
-
-        <button
-          type="submit"
-          disabled={!validateForm() || loading}
-          className="w-full bg-green-500 text-white py-3 px-4 rounded-lg font-bold hover:bg-green-600 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center"
-        >
-          {loading ? (
-            <>
-              <RefreshCw className="animate-spin mr-2" size={16} />
-              Procesando...
-            </>
-          ) : (
-            <>
-              <CreditCard className="mr-2" />
-              Proceder al Pago
-            </>
-          )}
-        </button>
-      </form>
-    </div>
-  );
+  // PersonalDataForm is now defined outside RifasApp
 
   const PaymentStatus = () => (
     <div className="bg-white rounded-lg shadow-lg p-6 text-center max-w-md mx-auto">
@@ -1115,7 +1144,17 @@ const RifasApp = () => {
           </>
         )}
 
-        {currentStep === 'form' && <PersonalDataForm />}
+        {currentStep === 'form' && (
+          <PersonalDataForm 
+            formData={formData}
+            setFormData={setFormData}
+            setCurrentStep={setCurrentStep}
+            handleFormSubmit={handleFormSubmit}
+            selectedNumbers={selectedNumbers}
+            PRICE_PER_NUMBER={PRICE_PER_NUMBER}
+            loading={loading}
+          />
+        )}
         {currentStep === 'payment' && <PaymentStatus />}
         {currentStep === 'confirmation' && <ConfirmationPage />}
       </div>
