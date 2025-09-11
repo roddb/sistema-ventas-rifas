@@ -1,0 +1,1063 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { ShoppingCart, User, School, Phone, Mail, CreditCard, Check, X, Clock, AlertCircle, Database, Settings, BarChart3, RefreshCw, Download } from 'lucide-react';
+
+// =========== CONFIGURACIÓN Y TIPOS ===========
+
+interface RaffleNumber {
+  id: number;
+  number: number;
+  status: 'available' | 'reserved' | 'sold';
+  reservedAt?: Date;
+  soldAt?: Date;
+  purchaseId?: string;
+}
+
+interface Purchase {
+  id: string;
+  buyerName: string;
+  studentName: string;
+  division: string;
+  course: string;
+  email: string;
+  phone: string;
+  numbers: number[];
+  totalAmount: number;
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  mercadoPagoPreferenceId?: string;
+  mercadoPagoPaymentId?: string;
+  createdAt: Date;
+}
+
+interface FormData {
+  buyerName: string;
+  studentName: string;
+  division: string;
+  course: string;
+  email: string;
+  phone: string;
+}
+
+// =========== HOOKS PERSONALIZADOS ===========
+
+const useLocalStorage = <T>(key: string, initialValue: T) => {
+  const [storedValue, setStoredValue] = useState<T>(initialValue);
+
+  useEffect(() => {
+    try {
+      const item = window.localStorage.getItem(key);
+      if (item) {
+        setStoredValue(JSON.parse(item));
+      }
+    } catch (error) {
+      console.error(`Error loading ${key} from localStorage:`, error);
+    }
+  }, [key]);
+
+  const setValue = (value: T | ((val: T) => T)) => {
+    try {
+      const valueToStore = value instanceof Function ? value(storedValue) : value;
+      setStoredValue(valueToStore);
+      window.localStorage.setItem(key, JSON.stringify(valueToStore));
+    } catch (error) {
+      console.error(`Error saving ${key} to localStorage:`, error);
+    }
+  };
+
+  return [storedValue, setValue] as const;
+};
+
+// =========== SERVICIOS SIMULADOS ===========
+
+const API_BASE = '/api';
+
+const apiService = {
+  // Números de rifa
+  async getNumbers(): Promise<RaffleNumber[]> {
+    // Simular llamada a API
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    const numbers: RaffleNumber[] = [];
+    for (let i = 1; i <= 2000; i++) {
+      // Simular algunos números vendidos/reservados
+      let status: 'available' | 'reserved' | 'sold' = 'available';
+      if (Math.random() < 0.05) status = 'sold';
+      else if (Math.random() < 0.02) status = 'reserved';
+      
+      numbers.push({
+        id: i,
+        number: i,
+        status,
+        ...(status === 'sold' && { soldAt: new Date(), purchaseId: `PUR-${i}` }),
+        ...(status === 'reserved' && { reservedAt: new Date() })
+      });
+    }
+    return numbers;
+  },
+
+  // Crear reserva temporal
+  async createReservation(numbers: number[]): Promise<{ success: boolean; reservationId: string }> {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    return {
+      success: true,
+      reservationId: `RES-${Date.now()}`
+    };
+  },
+
+  // Crear preferencia de MercadoPago
+  async createMercadoPagoPreference(purchaseData: Partial<Purchase>): Promise<{ preferenceId: string; initPoint: string }> {
+    await new Promise(resolve => setTimeout(resolve, 800));
+    
+    // Simular respuesta de MercadoPago
+    return {
+      preferenceId: `MP-${Date.now()}`,
+      initPoint: `https://sandbox.mercadopago.com.ar/checkout/v1/redirect?pref_id=MP-${Date.now()}`
+    };
+  },
+
+  // Verificar estado de pago
+  async checkPaymentStatus(paymentId: string): Promise<{ status: string; paymentMethod?: string }> {
+    await new Promise(resolve => setTimeout(resolve, 300));
+    return {
+      status: 'approved',
+      paymentMethod: 'credit_card'
+    };
+  }
+};
+
+// =========== CONTEXTO DE ESTADO GLOBAL ===========
+
+const useStore = () => {
+  const [selectedNumbers, setSelectedNumbers] = useState<Set<number>>(new Set());
+  const [numbers, setNumbers] = useState<RaffleNumber[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
+  const [purchases] = useLocalStorage<Purchase[]>('purchases', []);
+
+  const loadNumbers = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const numbersData = await apiService.getNumbers();
+      setNumbers(numbersData);
+    } catch (err) {
+      setError('Error cargando números de rifa');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const getNumberStatus = useCallback((number: number) => {
+    const numberData = numbers.find(n => n.number === number);
+    if (!numberData) return 'available';
+    
+    if (selectedNumbers.has(number)) return 'selected';
+    return numberData.status;
+  }, [numbers, selectedNumbers]);
+
+  const toggleNumber = useCallback((number: number) => {
+    const status = getNumberStatus(number);
+    if (status === 'sold' || status === 'reserved') return;
+
+    setSelectedNumbers(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(number)) {
+        newSet.delete(number);
+      } else {
+        newSet.add(number);
+      }
+      return newSet;
+    });
+  }, [getNumberStatus]);
+
+  return {
+    selectedNumbers,
+    setSelectedNumbers,
+    numbers,
+    loading,
+    error,
+    purchases,
+    loadNumbers,
+    getNumberStatus,
+    toggleNumber
+  };
+};
+
+// =========== COMPONENTES ===========
+
+const RifasApp = () => {
+  const {
+    selectedNumbers,
+    setSelectedNumbers,
+    numbers,
+    loading,
+    error,
+    purchases,
+    loadNumbers,
+    getNumberStatus,
+    toggleNumber
+  } = useStore();
+
+  const [currentStep, setCurrentStep] = useState<'selection' | 'form' | 'payment' | 'confirmation'>('selection');
+  const [currentView, setCurrentView] = useState<'app' | 'admin'>('app');
+  const [formData, setFormData] = useState<FormData>({
+    buyerName: '',
+    studentName: '',
+    division: '',
+    course: '',
+    email: '',
+    phone: ''
+  });
+
+  const [currentPurchase, setCurrentPurchase] = useState<Purchase | null>(null);
+  const [paymentStatus, setPaymentStatus] = useState<'pending' | 'processing' | 'approved' | 'rejected'>('pending');
+  const [reservationTimer, setReservationTimer] = useState<number>(0);
+
+  const PRICE_PER_NUMBER = 500;
+  const RESERVATION_TIMEOUT = 15 * 60; // 15 minutos en segundos
+
+  // Cargar números al montar el componente
+  useEffect(() => {
+    loadNumbers();
+  }, [loadNumbers]);
+
+  // Timer de reserva
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (currentStep === 'payment' && reservationTimer > 0) {
+      interval = setInterval(() => {
+        setReservationTimer(prev => {
+          if (prev <= 1) {
+            // Timeout - liberar números
+            handlePaymentTimeout();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [currentStep, reservationTimer]);
+
+  const handlePaymentTimeout = () => {
+    setCurrentStep('selection');
+    setSelectedNumbers(new Set());
+    setPaymentStatus('pending');
+    setReservationTimer(0);
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const getNumberColor = (status: string) => {
+    switch (status) {
+      case 'sold': return 'bg-red-500 text-white cursor-not-allowed opacity-50';
+      case 'reserved': return 'bg-orange-400 text-white cursor-not-allowed opacity-70';
+      case 'selected': return 'bg-blue-500 text-white cursor-pointer hover:bg-blue-600 ring-2 ring-blue-300';
+      default: return 'bg-green-500 text-white cursor-pointer hover:bg-green-600 hover:scale-105 transition-all duration-150';
+    }
+  };
+
+  const validateForm = () => {
+    const { buyerName, studentName, division, course, email } = formData;
+    return buyerName.trim() && studentName.trim() && division.trim() && course.trim() && email.trim();
+  };
+
+  const handleFormSubmit = async () => {
+    if (!validateForm()) return;
+    
+    try {
+      setLoading(true);
+      
+      // 1. Crear reserva temporal
+      const reservation = await apiService.createReservation(Array.from(selectedNumbers));
+      
+      // 2. Crear purchase
+      const purchase: Purchase = {
+        id: `PUR-${Date.now()}`,
+        ...formData,
+        numbers: Array.from(selectedNumbers).sort((a, b) => a - b),
+        totalAmount: selectedNumbers.size * PRICE_PER_NUMBER,
+        status: 'pending',
+        createdAt: new Date()
+      };
+      
+      // 3. Crear preferencia de MercadoPago
+      const mpPreference = await apiService.createMercadoPagoPreference(purchase);
+      purchase.mercadoPagoPreferenceId = mpPreference.preferenceId;
+      
+      setCurrentPurchase(purchase);
+      setCurrentStep('payment');
+      setReservationTimer(RESERVATION_TIMEOUT);
+      
+      // En producción, aquí redirigirías a MercadoPago
+      // window.location.href = mpPreference.initPoint;
+      
+    } catch (err) {
+      setError('Error procesando la compra');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const simulatePayment = async (status: 'approved' | 'rejected') => {
+    setPaymentStatus('processing');
+    
+    // Simular delay de procesamiento
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    setPaymentStatus(status);
+    
+    if (status === 'approved' && currentPurchase) {
+      // Actualizar purchase
+      currentPurchase.status = 'approved';
+      currentPurchase.mercadoPagoPaymentId = `PAY-${Date.now()}`;
+      
+      // Simular actualización de números en BD
+      const updatedNumbers = numbers.map(num => {
+        if (selectedNumbers.has(num.number)) {
+          return {
+            ...num,
+            status: 'sold' as const,
+            soldAt: new Date(),
+            purchaseId: currentPurchase.id
+          };
+        }
+        return num;
+      });
+      
+      setCurrentStep('confirmation');
+      setReservationTimer(0);
+    } else {
+      // Liberar números
+      handlePaymentTimeout();
+    }
+  };
+
+  const resetApp = () => {
+    setSelectedNumbers(new Set());
+    setCurrentStep('selection');
+    setCurrentView('app');
+    setFormData({
+      buyerName: '',
+      studentName: '',
+      division: '',
+      course: '',
+      email: '',
+      phone: ''
+    });
+    setCurrentPurchase(null);
+    setPaymentStatus('pending');
+    setReservationTimer(0);
+    loadNumbers();
+  };
+
+  // =========== NÚMERO GRID OPTIMIZADO (100x20) ===========
+  const NumberGrid = () => {
+    if (loading) {
+      return (
+        <div className="flex justify-center items-center h-64">
+          <RefreshCw className="animate-spin text-blue-500" size={32} />
+          <span className="ml-2 text-gray-600">Cargando números...</span>
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div className="text-center py-8">
+          <AlertCircle className="mx-auto mb-2 text-red-500" size={32} />
+          <p className="text-red-600 mb-4">{error}</p>
+          <button
+            onClick={loadNumbers}
+            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+          >
+            Reintentar
+          </button>
+        </div>
+      );
+    }
+
+    // Grid 100x20 = 2000 números
+    const rows = 20;
+    const cols = 100;
+
+    return (
+      <div className="overflow-x-auto p-4">
+        <div className="grid gap-0.5" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+          {Array.from({ length: rows * cols }, (_, index) => {
+            const number = index + 1;
+            const status = getNumberStatus(number);
+            
+            return (
+              <button
+                key={number}
+                onClick={() => toggleNumber(number)}
+                className={`
+                  w-7 h-7 text-xs font-bold rounded flex items-center justify-center
+                  ${getNumberColor(status)}
+                  ${status === 'sold' || status === 'reserved' ? '' : 'hover:shadow-lg'}
+                `}
+                disabled={status === 'sold' || status === 'reserved'}
+                title={`Número ${number} - ${status === 'sold' ? 'Vendido' : status === 'reserved' ? 'Reservado' : status === 'selected' ? 'Seleccionado' : 'Disponible'}`}
+              >
+                {number}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const SelectionSummary = () => (
+    <div className="bg-white rounded-lg shadow-lg p-6 border-l-4 border-blue-500 sticky top-4">
+      <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
+        <ShoppingCart className="mr-2" />
+        Resumen de Selección
+      </h3>
+      
+      <div className="space-y-3">
+        <div className="flex justify-between">
+          <span className="text-gray-600">Números seleccionados:</span>
+          <span className="font-bold">{selectedNumbers.size}</span>
+        </div>
+        
+        <div className="flex justify-between">
+          <span className="text-gray-600">Precio por número:</span>
+          <span className="font-bold">${PRICE_PER_NUMBER.toLocaleString('es-AR')}</span>
+        </div>
+        
+        <div className="border-t pt-3 flex justify-between text-lg">
+          <span className="font-bold text-gray-800">Total:</span>
+          <span className="font-bold text-green-600">
+            ${(selectedNumbers.size * PRICE_PER_NUMBER).toLocaleString('es-AR')}
+          </span>
+        </div>
+        
+        {selectedNumbers.size > 0 && (
+          <div className="mt-4">
+            <p className="text-sm text-gray-600 mb-2">Números seleccionados:</p>
+            <div className="max-h-32 overflow-y-auto">
+              <div className="flex flex-wrap gap-1">
+                {Array.from(selectedNumbers).sort((a, b) => a - b).map(num => (
+                  <span
+                    key={num}
+                    className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs cursor-pointer hover:bg-blue-200"
+                    onClick={() => toggleNumber(num)}
+                    title="Click para deseleccionar"
+                  >
+                    {num} ×
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+        
+        <div className="space-y-2">
+          <button
+            onClick={() => setCurrentStep('form')}
+            disabled={selectedNumbers.size === 0}
+            className="w-full bg-blue-500 text-white py-3 px-4 rounded-lg font-bold hover:bg-blue-600 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+          >
+            Continuar con la Compra
+          </button>
+          
+          {selectedNumbers.size > 0 && (
+            <button
+              onClick={() => setSelectedNumbers(new Set())}
+              className="w-full bg-gray-500 text-white py-2 px-4 rounded-lg hover:bg-gray-600 transition-colors"
+            >
+              Limpiar Selección
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Stats rápidas */}
+      <div className="mt-6 pt-4 border-t text-sm text-gray-600">
+        <div className="grid grid-cols-2 gap-4 text-center">
+          <div>
+            <div className="font-bold text-green-600">{numbers.filter(n => n.status === 'available').length}</div>
+            <div>Disponibles</div>
+          </div>
+          <div>
+            <div className="font-bold text-red-600">{numbers.filter(n => n.status === 'sold').length}</div>
+            <div>Vendidos</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const PersonalDataForm = () => (
+    <div className="bg-white rounded-lg shadow-lg p-6 max-w-2xl mx-auto">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-xl font-bold text-gray-800 flex items-center">
+          <User className="mr-2" />
+          Datos Personales
+        </h2>
+        <button
+          onClick={() => setCurrentStep('selection')}
+          className="text-gray-500 hover:text-gray-700 p-1"
+        >
+          <X size={24} />
+        </button>
+      </div>
+
+      <form onSubmit={(e) => { e.preventDefault(); handleFormSubmit(); }}>
+        <div className="grid md:grid-cols-2 gap-4 mb-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Nombre completo del comprador *
+            </label>
+            <input
+              type="text"
+              value={formData.buyerName}
+              onChange={(e) => setFormData({...formData, buyerName: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Ej: María González"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+              <School className="mr-1" size={16} />
+              Nombre del hijo/a *
+            </label>
+            <input
+              type="text"
+              value={formData.studentName}
+              onChange={(e) => setFormData({...formData, studentName: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Ej: Juan González"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              División *
+            </label>
+            <input
+              type="text"
+              value={formData.division}
+              onChange={(e) => setFormData({...formData, division: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Ej: A"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Curso *
+            </label>
+            <input
+              type="text"
+              value={formData.course}
+              onChange={(e) => setFormData({...formData, course: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Ej: 5to"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+              <Mail className="mr-1" size={16} />
+              Email *
+            </label>
+            <input
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData({...formData, email: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="ejemplo@gmail.com"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
+              <Phone className="mr-1" size={16} />
+              Teléfono
+            </label>
+            <input
+              type="tel"
+              value={formData.phone}
+              onChange={(e) => setFormData({...formData, phone: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="11 1234 5678"
+            />
+          </div>
+        </div>
+
+        <div className="bg-gray-50 p-4 rounded-lg mb-6">
+          <h4 className="font-medium text-gray-800 mb-3">Resumen de Compra:</h4>
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span>Números seleccionados:</span>
+              <span className="font-medium">{selectedNumbers.size}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span>Precio por número:</span>
+              <span className="font-medium">${PRICE_PER_NUMBER.toLocaleString('es-AR')}</span>
+            </div>
+            <div className="border-t pt-2 flex justify-between font-bold text-lg">
+              <span>Total:</span>
+              <span className="text-green-600">${(selectedNumbers.size * PRICE_PER_NUMBER).toLocaleString('es-AR')}</span>
+            </div>
+            
+            <div className="mt-3 max-h-20 overflow-y-auto">
+              <p className="text-xs text-gray-600 mb-1">Números: {Array.from(selectedNumbers).sort((a, b) => a - b).join(', ')}</p>
+            </div>
+          </div>
+        </div>
+
+        <button
+          type="submit"
+          disabled={!validateForm() || loading}
+          className="w-full bg-green-500 text-white py-3 px-4 rounded-lg font-bold hover:bg-green-600 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center"
+        >
+          {loading ? (
+            <>
+              <RefreshCw className="animate-spin mr-2" size={16} />
+              Procesando...
+            </>
+          ) : (
+            <>
+              <CreditCard className="mr-2" />
+              Proceder al Pago
+            </>
+          )}
+        </button>
+      </form>
+    </div>
+  );
+
+  const PaymentStatus = () => (
+    <div className="bg-white rounded-lg shadow-lg p-6 text-center max-w-md mx-auto">
+      <div className="mb-6">
+        {paymentStatus === 'pending' && (
+          <>
+            <Clock className="mx-auto mb-4 text-orange-500" size={48} />
+            <h2 className="text-xl font-bold text-gray-800 mb-2">Esperando Pago</h2>
+            <p className="text-gray-600 mb-4">En producción serías redirigido a MercadoPago</p>
+            {reservationTimer > 0 && (
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-4">
+                <p className="text-sm text-orange-700">
+                  <Clock className="inline mr-1" size={14} />
+                  Reserva expira en: <strong>{formatTime(reservationTimer)}</strong>
+                </p>
+              </div>
+            )}
+          </>
+        )}
+        
+        {paymentStatus === 'processing' && (
+          <>
+            <RefreshCw className="mx-auto mb-4 text-blue-500 animate-spin" size={48} />
+            <h2 className="text-xl font-bold text-gray-800 mb-2">Procesando Pago</h2>
+            <p className="text-gray-600">Verificando el estado del pago...</p>
+          </>
+        )}
+      </div>
+
+      {currentPurchase && (
+        <div className="bg-gray-50 p-4 rounded-lg mb-6 text-left">
+          <h4 className="font-medium text-gray-800 mb-2">Detalles de la Compra:</h4>
+          <div className="space-y-1 text-sm text-gray-600">
+            <p><strong>ID:</strong> {currentPurchase.id}</p>
+            <p><strong>Comprador:</strong> {currentPurchase.buyerName}</p>
+            <p><strong>Estudiante:</strong> {currentPurchase.studentName} - {currentPurchase.course} "{currentPurchase.division}"</p>
+            <p><strong>Números:</strong> {currentPurchase.numbers.join(', ')}</p>
+            <p><strong>Total:</strong> ${currentPurchase.totalAmount.toLocaleString('es-AR')}</p>
+            {currentPurchase.mercadoPagoPreferenceId && (
+              <p><strong>Preferencia MP:</strong> {currentPurchase.mercadoPagoPreferenceId}</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Botones de simulación para demo */}
+      {paymentStatus === 'pending' && (
+        <div className="space-y-2">
+          <p className="text-sm text-gray-500 mb-4">Simulación para demo:</p>
+          <button
+            onClick={() => simulatePayment('approved')}
+            className="w-full bg-green-500 text-white py-2 px-4 rounded font-bold hover:bg-green-600 mb-2"
+          >
+            ✓ Simular Pago Exitoso
+          </button>
+          <button
+            onClick={() => simulatePayment('rejected')}
+            className="w-full bg-red-500 text-white py-2 px-4 rounded font-bold hover:bg-red-600"
+          >
+            ✗ Simular Pago Rechazado
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
+  const ConfirmationPage = () => (
+    <div className="bg-white rounded-lg shadow-lg p-6 text-center max-w-md mx-auto">
+      <Check className="mx-auto mb-4 text-green-500" size={64} />
+      <h2 className="text-2xl font-bold text-green-600 mb-4">¡Compra Exitosa!</h2>
+      
+      {currentPurchase && (
+        <div className="bg-green-50 p-4 rounded-lg mb-6 text-left">
+          <h3 className="font-bold text-gray-800 mb-3">Detalles de tu compra:</h3>
+          <div className="space-y-2 text-sm">
+            <p><strong>ID:</strong> {currentPurchase.id}</p>
+            <p><strong>Comprador:</strong> {currentPurchase.buyerName}</p>
+            <p><strong>Estudiante:</strong> {currentPurchase.studentName}</p>
+            <p><strong>Curso:</strong> {currentPurchase.course} "{currentPurchase.division}"</p>
+            <p><strong>Números comprados:</strong> {currentPurchase.numbers.join(', ')}</p>
+            <p><strong>Total pagado:</strong> ${currentPurchase.totalAmount.toLocaleString('es-AR')}</p>
+            <p><strong>Método de pago:</strong> MercadoPago</p>
+            <p><strong>Fecha:</strong> {currentPurchase.createdAt.toLocaleDateString('es-AR')}</p>
+          </div>
+        </div>
+      )}
+
+      <div className="bg-blue-50 p-4 rounded-lg mb-6">
+        <AlertCircle className="mx-auto mb-2 text-blue-500" size={24} />
+        <p className="text-sm text-blue-700">
+          Recibirás un email de confirmación en {formData.email} con todos los detalles de tu compra.
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        <button
+          onClick={resetApp}
+          className="w-full bg-blue-500 text-white py-3 px-6 rounded-lg font-bold hover:bg-blue-600 transition-colors"
+        >
+          Realizar Nueva Compra
+        </button>
+        
+        <button
+          onClick={() => setCurrentView('admin')}
+          className="w-full bg-gray-500 text-white py-2 px-6 rounded-lg hover:bg-gray-600 transition-colors"
+        >
+          Ver Panel de Administración
+        </button>
+      </div>
+    </div>
+  );
+
+  const AdminPanel = () => {
+    const totalSold = numbers.filter(n => n.status === 'sold').length;
+    const totalReserved = numbers.filter(n => n.status === 'reserved').length;
+    const totalAvailable = numbers.filter(n => n.status === 'available').length;
+    const totalRevenue = totalSold * PRICE_PER_NUMBER;
+
+    return (
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <div className="flex justify-between items-center">
+            <h1 className="text-2xl font-bold text-gray-800 flex items-center">
+              <BarChart3 className="mr-2" />
+              Panel de Administración
+            </h1>
+            <button
+              onClick={() => setCurrentView('app')}
+              className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
+            >
+              Volver a la App
+            </button>
+          </div>
+        </div>
+
+        {/* Métricas */}
+        <div className="grid md:grid-cols-4 gap-4">
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Números Vendidos</p>
+                <p className="text-2xl font-bold text-green-600">{totalSold}</p>
+              </div>
+              <Check className="text-green-500" size={32} />
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Números Reservados</p>
+                <p className="text-2xl font-bold text-orange-600">{totalReserved}</p>
+              </div>
+              <Clock className="text-orange-500" size={32} />
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Disponibles</p>
+                <p className="text-2xl font-bold text-blue-600">{totalAvailable}</p>
+              </div>
+              <Database className="text-blue-500" size={32} />
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Ingresos</p>
+                <p className="text-2xl font-bold text-green-600">${totalRevenue.toLocaleString('es-AR')}</p>
+              </div>
+              <CreditCard className="text-green-500" size={32} />
+            </div>
+          </div>
+        </div>
+
+        {/* Progreso */}
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <h3 className="text-lg font-bold text-gray-800 mb-4">Progreso de Ventas</h3>
+          <div className="w-full bg-gray-200 rounded-full h-4 mb-4">
+            <div 
+              className="bg-green-500 h-4 rounded-full transition-all duration-300"
+              style={{ width: `${(totalSold / 2000) * 100}%` }}
+            />
+          </div>
+          <div className="flex justify-between text-sm text-gray-600">
+            <span>{totalSold} / 2000 vendidos</span>
+            <span>{((totalSold / 2000) * 100).toFixed(1)}% completado</span>
+          </div>
+        </div>
+
+        {/* Lista de compras recientes */}
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-bold text-gray-800">Compras Recientes</h3>
+            <button className="text-blue-500 hover:text-blue-700 flex items-center">
+              <Download className="mr-1" size={16} />
+              Exportar
+            </button>
+          </div>
+          
+          {purchases.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-2 text-left">ID</th>
+                    <th className="px-4 py-2 text-left">Comprador</th>
+                    <th className="px-4 py-2 text-left">Estudiante</th>
+                    <th className="px-4 py-2 text-left">Números</th>
+                    <th className="px-4 py-2 text-left">Total</th>
+                    <th className="px-4 py-2 text-left">Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {purchases.slice(0, 10).map(purchase => (
+                    <tr key={purchase.id} className="border-b hover:bg-gray-50">
+                      <td className="px-4 py-2 font-mono text-xs">{purchase.id}</td>
+                      <td className="px-4 py-2">{purchase.buyerName}</td>
+                      <td className="px-4 py-2">{purchase.studentName}</td>
+                      <td className="px-4 py-2">{purchase.numbers.length} números</td>
+                      <td className="px-4 py-2">${purchase.totalAmount.toLocaleString('es-AR')}</td>
+                      <td className="px-4 py-2">
+                        <span className={`px-2 py-1 rounded text-xs ${
+                          purchase.status === 'approved' ? 'bg-green-100 text-green-800' :
+                          purchase.status === 'pending' ? 'bg-orange-100 text-orange-800' :
+                          'bg-red-100 text-red-800'
+                        }`}>
+                          {purchase.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-gray-600 text-center py-8">No hay compras registradas aún</p>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const Legend = () => (
+    <div className="bg-white rounded-lg shadow-lg p-4 mb-4">
+      <h4 className="font-bold text-gray-800 mb-3">Leyenda:</h4>
+      <div className="flex flex-wrap gap-4 text-sm">
+        <div className="flex items-center">
+          <div className="w-4 h-4 bg-green-500 rounded mr-2"></div>
+          <span>Disponible</span>
+        </div>
+        <div className="flex items-center">
+          <div className="w-4 h-4 bg-blue-500 rounded mr-2 ring-2 ring-blue-300"></div>
+          <span>Seleccionado</span>
+        </div>
+        <div className="flex items-center">
+          <div className="w-4 h-4 bg-orange-400 rounded mr-2 opacity-70"></div>
+          <span>Reservado (temporal)</span>
+        </div>
+        <div className="flex items-center">
+          <div className="w-4 h-4 bg-red-500 rounded mr-2 opacity-50"></div>
+          <span>Vendido</span>
+        </div>
+      </div>
+      
+      <div className="mt-3 pt-3 border-t text-xs text-gray-600">
+        <p><strong>Tip:</strong> Haz click en los números verdes para seleccionarlos. Los números seleccionados aparecen en azul.</p>
+        <p>Puedes hacer click en los números azules del resumen para deseleccionarlos.</p>
+      </div>
+    </div>
+  );
+
+  // =========== RENDER PRINCIPAL ===========
+
+  if (currentView === 'admin') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+        <div className="container mx-auto px-4 py-6">
+          <AdminPanel />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+      {/* Header */}
+      <header className="bg-white shadow-lg">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-800">
+                🎫 Rifa Escolar 2024
+              </h1>
+              <p className="text-gray-600 mt-1">
+                Selecciona tus números de la suerte • {numbers.filter(n => n.status === 'sold').length}/2000 vendidos
+              </p>
+            </div>
+            <button
+              onClick={() => setCurrentView('admin')}
+              className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-900 flex items-center"
+            >
+              <Settings className="mr-1" size={16} />
+              Admin
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <div className="container mx-auto px-4 py-6">
+        {/* Mostrar error global si existe */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+            <div className="flex">
+              <AlertCircle className="text-red-500 mr-2 flex-shrink-0" size={20} />
+              <div>
+                <p className="text-red-800 font-medium">{error}</p>
+                <button
+                  onClick={() => setError(null)}
+                  className="text-red-600 hover:text-red-800 text-sm underline mt-1"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Navegación por pasos */}
+        <div className="mb-6">
+          <div className="flex items-center justify-center space-x-4">
+            {[
+              { step: 'selection', label: 'Selección', icon: ShoppingCart },
+              { step: 'form', label: 'Datos', icon: User },
+              { step: 'payment', label: 'Pago', icon: CreditCard },
+              { step: 'confirmation', label: 'Confirmación', icon: Check }
+            ].map(({ step, label, icon: Icon }, index) => (
+              <div key={step} className="flex items-center">
+                <div className={`
+                  w-10 h-10 rounded-full flex items-center justify-center border-2 transition-colors
+                  ${currentStep === step 
+                    ? 'bg-blue-500 border-blue-500 text-white' 
+                    : index < ['selection', 'form', 'payment', 'confirmation'].indexOf(currentStep)
+                      ? 'bg-green-500 border-green-500 text-white'
+                      : 'bg-gray-100 border-gray-300 text-gray-400'
+                  }
+                `}>
+                  <Icon size={16} />
+                </div>
+                <span className={`ml-2 text-sm font-medium ${
+                  currentStep === step ? 'text-blue-600' : 'text-gray-500'
+                }`}>
+                  {label}
+                </span>
+                {index < 3 && <div className="ml-4 w-8 h-0.5 bg-gray-300" />}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Contenido principal */}
+        {currentStep === 'selection' && (
+          <>
+            <Legend />
+            <div className="grid lg:grid-cols-4 gap-6">
+              <div className="lg:col-span-3">
+                <div className="bg-white rounded-lg shadow-lg">
+                  <div className="p-4 border-b">
+                    <div className="flex justify-between items-center">
+                      <h2 className="text-lg font-bold text-gray-800">
+                        Grilla de Números (1-2000)
+                      </h2>
+                      <div className="flex items-center space-x-4 text-sm">
+                        <span className="text-green-600">
+                          ✓ {numbers.filter(n => n.status === 'available').length} disponibles
+                        </span>
+                        <span className="text-red-600">
+                          ✗ {numbers.filter(n => n.status === 'sold').length} vendidos
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <NumberGrid />
+                </div>
+              </div>
+              <div className="lg:col-span-1">
+                <SelectionSummary />
+              </div>
+            </div>
+          </>
+        )}
+
+        {currentStep === 'form' && <PersonalDataForm />}
+        {currentStep === 'payment' && <PaymentStatus />}
+        {currentStep === 'confirmation' && <ConfirmationPage />}
+      </div>
+
+      {/* Footer */}
+      <footer className="bg-gray-800 text-white py-6 mt-8">
+        <div className="container mx-auto px-4">
+          <div className="text-center">
+            <p className="text-sm mb-2">
+              © 2024 Colegio. Sistema desarrollado para evento escolar.
+            </p>
+            <p className="text-xs text-gray-400">
+              Integrado con MercadoPago • Base de datos Turso • Hosting Vercel
+            </p>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+};
+
+export default RifasApp;
