@@ -1203,6 +1203,7 @@ const RifasApp = () => {
                 <RefreshCw className={`mr-1 ${loading ? 'animate-spin' : ''}`} size={16} />
                 Actualizar
               </button>
+              {/* Botón Admin ocultado para usuarios finales
               <button
                 onClick={() => setCurrentView('admin')}
                 className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-900 flex items-center"
@@ -1210,6 +1211,7 @@ const RifasApp = () => {
                 <Settings className="mr-1" size={16} />
                 Admin
               </button>
+              */}
             </div>
           </div>
         </div>
