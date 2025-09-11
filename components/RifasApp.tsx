@@ -123,6 +123,50 @@ const apiService = {
     };
   },
 
+  // Confirmar pago
+  async confirmPayment(purchaseId: string): Promise<{ success: boolean }> {
+    try {
+      const response = await fetch(`${API_BASE}/payment/confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ purchaseId })
+      });
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error('API Error:', response.status, errorData);
+        throw new Error(`Error al confirmar pago: ${response.status}`);
+      }
+      const data = await response.json();
+      console.log('Payment confirmed:', data);
+      return data;
+    } catch (error) {
+      console.error('Error confirming payment:', error);
+      throw error;
+    }
+  },
+
+  // Cancelar pago
+  async cancelPayment(purchaseId: string, reason?: string): Promise<{ success: boolean }> {
+    try {
+      const response = await fetch(`${API_BASE}/payment/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ purchaseId, reason })
+      });
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error('API Error:', response.status, errorData);
+        throw new Error(`Error al cancelar pago: ${response.status}`);
+      }
+      const data = await response.json();
+      console.log('Payment cancelled:', data);
+      return data;
+    } catch (error) {
+      console.error('Error cancelling payment:', error);
+      throw error;
+    }
+  },
+
   // Verificar estado de pago
   async checkPaymentStatus(paymentId: string): Promise<{ status: string; paymentMethod?: string }> {
     await new Promise(resolve => setTimeout(resolve, 300));
@@ -440,11 +484,26 @@ const RifasApp = () => {
     return () => clearInterval(interval);
   }, [currentStep, reservationTimer]);
 
-  const handlePaymentTimeout = () => {
+  const handlePaymentTimeout = async () => {
+    // Si hay una compra actual, cancelarla en el backend
+    if (currentPurchase && currentPurchase.id) {
+      try {
+        console.log('Cancelling purchase due to timeout:', currentPurchase.id);
+        await apiService.cancelPayment(currentPurchase.id, 'Payment timeout - reservation expired');
+      } catch (error) {
+        console.error('Error cancelling purchase on timeout:', error);
+      }
+    }
+    
+    // Limpiar estado local
     setCurrentStep('selection');
     setSelectedNumbers(new Set());
     setPaymentStatus('pending');
     setReservationTimer(0);
+    setCurrentPurchase(null);
+    
+    // Recargar números para reflejar cambios
+    await loadNumbers();
   };
 
   const formatTime = (seconds: number) => {
@@ -516,32 +575,53 @@ const RifasApp = () => {
   };
 
   const simulatePayment = async (status: 'approved' | 'rejected') => {
+    if (!currentPurchase) {
+      console.error('No current purchase to process');
+      return;
+    }
+    
     setPaymentStatus('processing');
     
-    // Simular delay de procesamiento
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    setPaymentStatus(status);
-    
-    if (status === 'approved' && currentPurchase) {
-      // Actualizar purchase
-      currentPurchase.status = 'approved';
-      currentPurchase.mercadoPagoPaymentId = `PAY-${Date.now()}`;
+    try {
+      // Simular delay de procesamiento
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
-      // Limpiar números seleccionados ANTES de recargar
-      setSelectedNumbers(new Set());
-      
-      // Recargar números desde la BD para reflejar los cambios reales
-      console.log('Reloading numbers after payment...');
-      await loadNumbers();
-      
-      // Pequeño delay para asegurar que el estado se actualice
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      setCurrentStep('confirmation');
-      setReservationTimer(0);
-    } else {
-      // Liberar números
+      if (status === 'approved') {
+        // Confirmar pago en el backend
+        console.log('Confirming payment for purchase:', currentPurchase.id);
+        await apiService.confirmPayment(currentPurchase.id);
+        
+        // Actualizar estado local
+        currentPurchase.status = 'approved';
+        currentPurchase.mercadoPagoPaymentId = `PAY-${Date.now()}`;
+        setPaymentStatus('approved');
+        
+        // Limpiar números seleccionados
+        setSelectedNumbers(new Set());
+        
+        // Recargar números desde la BD para reflejar los cambios
+        console.log('Reloading numbers after payment confirmation...');
+        await loadNumbers();
+        
+        // Ir a confirmación
+        setCurrentStep('confirmation');
+        setReservationTimer(0);
+      } else {
+        // Cancelar pago en el backend
+        console.log('Cancelling payment for purchase:', currentPurchase.id);
+        await apiService.cancelPayment(currentPurchase.id, 'Payment rejected by simulation');
+        
+        // Actualizar estado local
+        currentPurchase.status = 'rejected';
+        setPaymentStatus('rejected');
+        
+        // Limpiar y volver a selección
+        handlePaymentTimeout();
+      }
+    } catch (error) {
+      console.error('Error processing simulated payment:', error);
+      setPaymentStatus('rejected');
+      alert('Error al procesar el pago. Por favor intenta nuevamente.');
       handlePaymentTimeout();
     }
   };

@@ -53,10 +53,8 @@ export async function POST(request: Request) {
       totalAmount: data.totalAmount
     });
     
-    // Simular aprobación de pago (temporal, hasta integrar MercadoPago)
-    await RaffleService.confirmPayment(purchaseId, {
-      paymentMethod: 'simulation'
-    });
+    // NO confirmar automáticamente - esperar a que el frontend simule el pago
+    console.log(`Purchase ${purchaseId} created. Waiting for payment confirmation...`);
     
     return NextResponse.json({
       success: true,

@@ -199,6 +199,43 @@ export class RaffleService {
     return true;
   }
 
+  // Cancelar pago y liberar números reservados
+  static async cancelPayment(purchaseId: string) {
+    if (!this.isDbAvailable()) {
+      return true;
+    }
+    
+    // Actualizar estado de la compra
+    await db
+      .update(purchases)
+      .set({
+        paymentStatus: 'cancelled',
+        updatedAt: new Date()
+      })
+      .where(eq(purchases.id, purchaseId));
+    
+    // Liberar números reservados
+    await db
+      .update(raffleNumbers)
+      .set({
+        status: 'available',
+        reservedAt: null,
+        purchaseId: null,
+        soldAt: null,
+        updatedAt: new Date()
+      })
+      .where(eq(raffleNumbers.purchaseId, purchaseId));
+    
+    // Log del evento
+    await db.insert(eventLogs).values({
+      eventType: 'PAYMENT_CANCELLED',
+      purchaseId,
+      data: JSON.stringify({ cancelledAt: new Date() })
+    });
+    
+    return true;
+  }
+
   // Liberar números reservados que expiraron (más de 15 minutos)
   static async releaseExpiredReservations() {
     if (!this.isDbAvailable()) {
