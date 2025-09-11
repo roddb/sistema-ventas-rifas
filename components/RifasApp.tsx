@@ -78,17 +78,11 @@ const apiService = {
     
     const numbers: RaffleNumber[] = [];
     for (let i = 1; i <= 2000; i++) {
-      // Simular algunos números vendidos/reservados
-      let status: 'available' | 'reserved' | 'sold' = 'available';
-      if (Math.random() < 0.05) status = 'sold';
-      else if (Math.random() < 0.02) status = 'reserved';
-      
+      // Todos los números comienzan como disponibles
       numbers.push({
         id: i,
         number: i,
-        status,
-        ...(status === 'sold' && { soldAt: new Date(), purchaseId: `PUR-${i}` }),
-        ...(status === 'reserved' && { reservedAt: new Date() })
+        status: 'available'
       });
     }
     return numbers;

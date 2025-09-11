@@ -1,0 +1,214 @@
+import { db, schema } from '@/lib/db';
+import { eq, and, or, gte, lte, sql } from 'drizzle-orm';
+import { nanoid } from 'nanoid';
+
+const { raffles, raffleNumbers, purchases, purchaseNumbers, eventLogs } = schema;
+
+export class RaffleService {
+  // Obtener rifa activa
+  static async getActiveRaffle() {
+    const [raffle] = await db
+      .select()
+      .from(raffles)
+      .where(eq(raffles.isActive, true))
+      .limit(1);
+    
+    return raffle;
+  }
+
+  // Obtener todos los números de la rifa
+  static async getRaffleNumbers(raffleId: number) {
+    const numbers = await db
+      .select()
+      .from(raffleNumbers)
+      .where(eq(raffleNumbers.raffleId, raffleId))
+      .orderBy(raffleNumbers.number);
+    
+    return numbers;
+  }
+
+  // Reservar números temporalmente (15 minutos)
+  static async reserveNumbers(raffleId: number, numberIds: number[]) {
+    const reservationId = `TEMP-${nanoid(10)}`;
+    const reservedAt = new Date();
+    
+    // Actualizar números a estado reservado
+    await db
+      .update(raffleNumbers)
+      .set({
+        status: 'reserved',
+        reservedAt,
+        purchaseId: reservationId,
+        updatedAt: new Date()
+      })
+      .where(
+        and(
+          eq(raffleNumbers.raffleId, raffleId),
+          eq(raffleNumbers.status, 'available'),
+          sql`${raffleNumbers.number} IN (${numberIds.join(',')})`
+        )
+      );
+    
+    // Log del evento
+    await db.insert(eventLogs).values({
+      eventType: 'NUMBERS_RESERVED',
+      purchaseId: reservationId,
+      data: JSON.stringify({ numberIds, reservedAt })
+    });
+    
+    return reservationId;
+  }
+
+  // Crear compra
+  static async createPurchase(data: {
+    raffleId: number;
+    buyerName: string;
+    studentName: string;
+    division: string;
+    course: string;
+    email: string;
+    phone?: string;
+    numberIds: number[];
+    totalAmount: number;
+  }) {
+    const purchaseId = `PUR-${nanoid(10)}`;
+    
+    // Crear registro de compra
+    await db.insert(purchases).values({
+      id: purchaseId,
+      raffleId: data.raffleId,
+      buyerName: data.buyerName,
+      studentName: data.studentName,
+      division: data.division,
+      course: data.course,
+      email: data.email,
+      phone: data.phone,
+      totalAmount: data.totalAmount,
+      numbersCount: data.numberIds.length,
+      paymentStatus: 'pending'
+    });
+    
+    // Actualizar números con el ID de compra real
+    await db
+      .update(raffleNumbers)
+      .set({
+        purchaseId,
+        updatedAt: new Date()
+      })
+      .where(
+        and(
+          eq(raffleNumbers.raffleId, data.raffleId),
+          sql`${raffleNumbers.number} IN (${data.numberIds.join(',')})`
+        )
+      );
+    
+    // Crear relaciones en purchase_numbers
+    const numberRecords = await db
+      .select()
+      .from(raffleNumbers)
+      .where(
+        and(
+          eq(raffleNumbers.raffleId, data.raffleId),
+          sql`${raffleNumbers.number} IN (${data.numberIds.join(',')})`
+        )
+      );
+    
+    for (const num of numberRecords) {
+      await db.insert(purchaseNumbers).values({
+        purchaseId,
+        raffleNumberId: num.id
+      });
+    }
+    
+    // Log del evento
+    await db.insert(eventLogs).values({
+      eventType: 'PURCHASE_CREATED',
+      purchaseId,
+      data: JSON.stringify(data)
+    });
+    
+    return purchaseId;
+  }
+
+  // Confirmar pago y marcar números como vendidos
+  static async confirmPayment(purchaseId: string, paymentData: {
+    mercadoPagoPaymentId?: string;
+    paymentMethod?: string;
+  }) {
+    // Actualizar estado de la compra
+    await db
+      .update(purchases)
+      .set({
+        paymentStatus: 'approved',
+        mercadoPagoPaymentId: paymentData.mercadoPagoPaymentId,
+        paymentMethod: paymentData.paymentMethod,
+        updatedAt: new Date()
+      })
+      .where(eq(purchases.id, purchaseId));
+    
+    // Marcar números como vendidos
+    await db
+      .update(raffleNumbers)
+      .set({
+        status: 'sold',
+        soldAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(raffleNumbers.purchaseId, purchaseId));
+    
+    // Log del evento
+    await db.insert(eventLogs).values({
+      eventType: 'PAYMENT_CONFIRMED',
+      purchaseId,
+      data: JSON.stringify(paymentData)
+    });
+    
+    return true;
+  }
+
+  // Liberar números reservados que expiraron (más de 15 minutos)
+  static async releaseExpiredReservations() {
+    const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
+    
+    const result = await db
+      .update(raffleNumbers)
+      .set({
+        status: 'available',
+        reservedAt: null,
+        purchaseId: null,
+        updatedAt: new Date()
+      })
+      .where(
+        and(
+          eq(raffleNumbers.status, 'reserved'),
+          lte(raffleNumbers.reservedAt, fifteenMinutesAgo)
+        )
+      );
+    
+    // Log del evento
+    await db.insert(eventLogs).values({
+      eventType: 'EXPIRED_RESERVATIONS_RELEASED',
+      data: JSON.stringify({ 
+        releasedAt: new Date(),
+        fifteenMinutesAgo 
+      })
+    });
+    
+    return result;
+  }
+
+  // Obtener estadísticas
+  static async getStats(raffleId: number) {
+    const [stats] = await db
+      .select({
+        total: sql<number>`COUNT(*)`,
+        sold: sql<number>`SUM(CASE WHEN status = 'sold' THEN 1 ELSE 0 END)`,
+        reserved: sql<number>`SUM(CASE WHEN status = 'reserved' THEN 1 ELSE 0 END)`,
+        available: sql<number>`SUM(CASE WHEN status = 'available' THEN 1 ELSE 0 END)`
+      })
+      .from(raffleNumbers)
+      .where(eq(raffleNumbers.raffleId, raffleId));
+    
+    return stats;
+  }
+}
