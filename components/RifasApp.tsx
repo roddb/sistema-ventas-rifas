@@ -361,8 +361,10 @@ const RifasApp = () => {
     loadNumbers();
   };
 
-  // =========== NÚMERO GRID OPTIMIZADO (100x20) ===========
+  // =========== NÚMERO GRID OPTIMIZADO (20x20) CON PAGINACIÓN ===========
   const NumberGrid = () => {
+    const [currentPage, setCurrentPage] = useState(1);
+    
     if (loading) {
       return (
         <div className="flex justify-center items-center h-64">
@@ -387,33 +389,104 @@ const RifasApp = () => {
       );
     }
 
-    // Grid 100x20 = 2000 números
+    // Grid 20x20 = 400 números por página
     const rows = 20;
-    const cols = 100;
+    const cols = 20;
+    const numbersPerPage = rows * cols;
+    const totalPages = Math.ceil(2000 / numbersPerPage); // 5 páginas
+    const startNumber = (currentPage - 1) * numbersPerPage + 1;
+    const endNumber = Math.min(currentPage * numbersPerPage, 2000);
 
     return (
-      <div className="overflow-x-auto p-4">
-        <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${cols}, minmax(40px, 1fr))` }}>
-          {Array.from({ length: rows * cols }, (_, index) => {
-            const number = index + 1;
-            const status = getNumberStatus(number);
+      <div className="p-4">
+        {/* Indicador de página y navegación superior */}
+        <div className="flex justify-between items-center mb-4">
+          <div className="text-lg font-bold text-gray-700">
+            Números {startNumber} - {endNumber} de 2000
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              disabled={currentPage === 1}
+              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center"
+            >
+              ← Anterior
+            </button>
             
-            return (
-              <button
-                key={number}
-                onClick={() => toggleNumber(number)}
-                className={`
-                  w-10 h-10 text-xs font-bold rounded flex items-center justify-center
-                  ${getNumberColor(status)}
-                  ${status === 'sold' || status === 'reserved' ? '' : 'hover:shadow-lg'}
-                `}
-                disabled={status === 'sold' || status === 'reserved'}
-                title={`Número ${number} - ${status === 'sold' ? 'Vendido' : status === 'reserved' ? 'Reservado' : status === 'selected' ? 'Seleccionado' : 'Disponible'}`}
-              >
-                {number}
-              </button>
-            );
-          })}
+            <span className="px-4 py-2 font-medium">
+              Página {currentPage} de {totalPages}
+            </span>
+            
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              disabled={currentPage === totalPages}
+              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center"
+            >
+              Siguiente →
+            </button>
+          </div>
+        </div>
+
+        {/* Grid de números */}
+        <div className="border border-gray-200 rounded-lg p-4 bg-white">
+          <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${cols}, minmax(40px, 1fr))` }}>
+            {Array.from({ length: numbersPerPage }, (_, index) => {
+              const number = startNumber + index;
+              if (number > 2000) return null; // Por si acaso
+              
+              const status = getNumberStatus(number);
+              
+              return (
+                <button
+                  key={number}
+                  onClick={() => toggleNumber(number)}
+                  className={`
+                    w-10 h-10 text-xs font-bold rounded flex items-center justify-center
+                    ${getNumberColor(status)}
+                    ${status === 'sold' || status === 'reserved' ? '' : 'hover:shadow-lg'}
+                  `}
+                  disabled={status === 'sold' || status === 'reserved'}
+                  title={`Número ${number} - ${status === 'sold' ? 'Vendido' : status === 'reserved' ? 'Reservado' : status === 'selected' ? 'Seleccionado' : 'Disponible'}`}
+                >
+                  {number}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Navegación inferior con acceso rápido a páginas */}
+        <div className="flex justify-center items-center gap-2 mt-4">
+          <button
+            onClick={() => setCurrentPage(1)}
+            disabled={currentPage === 1}
+            className="px-3 py-1 text-sm bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Primera
+          </button>
+          
+          {[...Array(totalPages)].map((_, i) => (
+            <button
+              key={i + 1}
+              onClick={() => setCurrentPage(i + 1)}
+              className={`px-3 py-1 text-sm rounded ${
+                currentPage === i + 1
+                  ? 'bg-blue-500 text-white'
+                  : 'bg-gray-200 hover:bg-gray-300'
+              }`}
+            >
+              {i + 1}
+            </button>
+          ))}
+          
+          <button
+            onClick={() => setCurrentPage(totalPages)}
+            disabled={currentPage === totalPages}
+            className="px-3 py-1 text-sm bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Última
+          </button>
         </div>
       </div>
     );
@@ -1020,7 +1093,7 @@ const RifasApp = () => {
                   <div className="p-4 border-b">
                     <div className="flex justify-between items-center">
                       <h2 className="text-lg font-bold text-gray-800">
-                        Grilla de Números (1-2000)
+                        Seleccionar Números de Rifa
                       </h2>
                       <div className="flex items-center space-x-4 text-sm">
                         <span className="text-green-600">
