@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { RaffleService } from '@/lib/services/raffleService';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export async function GET() {
   try {
     // Obtener rifa activa
