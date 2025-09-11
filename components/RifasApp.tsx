@@ -1240,9 +1240,7 @@ const RifasApp = () => {
             <div 
               className="cursor-pointer"
               onClick={() => {
-                setCurrentStep('selection');
-                setSelectedNumbers(new Set());
-                setShowAdminPanel(false);
+                window.location.href = '/';
               }}
             >
               <h1 className="text-2xl font-bold text-gray-800 hover:text-blue-600 transition-colors">
