@@ -39,7 +39,7 @@ interface FormData {
 
 // =========== HOOKS PERSONALIZADOS ===========
 
-const useLocalStorage = <T>(key: string, initialValue: T) => {
+const useLocalStorage = <T,>(key: string, initialValue: T) => {
   const [storedValue, setStoredValue] = useState<T>(initialValue);
 
   useEffect(() => {
@@ -176,7 +176,9 @@ const useStore = () => {
     setSelectedNumbers,
     numbers,
     loading,
+    setLoading,
     error,
+    setError,
     purchases,
     loadNumbers,
     getNumberStatus,
@@ -192,7 +194,9 @@ const RifasApp = () => {
     setSelectedNumbers,
     numbers,
     loading,
+    setLoading,
     error,
+    setError,
     purchases,
     loadNumbers,
     getNumberStatus,
