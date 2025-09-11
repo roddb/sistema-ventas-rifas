@@ -187,11 +187,23 @@ const apiService = {
 
 // =========== CONTEXTO DE ESTADO GLOBAL ===========
 
+interface RaffleConfig {
+  id: number | null;
+  title: string;
+  description: string;
+  totalNumbers: number;
+  pricePerNumber: number;
+  startDate: Date;
+  endDate: Date;
+  isActive: boolean;
+}
+
 const useStore = () => {
   const [selectedNumbers, setSelectedNumbers] = useState<Set<number>>(new Set());
   const [numbers, setNumbers] = useState<RaffleNumber[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [raffleConfig, setRaffleConfig] = useState<RaffleConfig | null>(null);
   
   const [purchases, setPurchases] = useState<Purchase[]>([]);
 
@@ -199,6 +211,15 @@ const useStore = () => {
     setLoading(true);
     setError(null);
     try {
+      console.log('Loading raffle config from API...');
+      // Cargar configuración de la rifa
+      const configResponse = await fetch(`/api/raffle/config?t=${Date.now()}`);
+      if (configResponse.ok) {
+        const config = await configResponse.json();
+        console.log('Raffle config loaded:', config);
+        setRaffleConfig(config);
+      }
+      
       console.log('Loading numbers from API...');
       const numbersData = await apiService.getNumbers();
       console.log(`Loaded ${numbersData.length} numbers`);
@@ -248,7 +269,8 @@ const useStore = () => {
     purchases,
     loadNumbers,
     getNumberStatus,
-    toggleNumber
+    toggleNumber,
+    raffleConfig
   };
 };
 
@@ -440,7 +462,8 @@ const RifasApp = () => {
     purchases,
     loadNumbers,
     getNumberStatus,
-    toggleNumber
+    toggleNumber,
+    raffleConfig
   } = useStore();
 
   const [currentStep, setCurrentStep] = useState<'selection' | 'form' | 'payment' | 'confirmation'>('selection');
@@ -458,7 +481,9 @@ const RifasApp = () => {
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'processing' | 'approved' | 'rejected'>('pending');
   const [reservationTimer, setReservationTimer] = useState<number>(0);
 
-  const PRICE_PER_NUMBER = 500;
+  // Usar valores dinámicos de la BD o valores por defecto
+  const PRICE_PER_NUMBER = raffleConfig?.pricePerNumber || 500;
+  const TOTAL_NUMBERS = raffleConfig?.totalNumbers || 2000;
   const RESERVATION_TIMEOUT = 15 * 60; // 15 minutos en segundos
 
   // Cargar números al montar el componente y actualizar periódicamente
@@ -686,16 +711,16 @@ const RifasApp = () => {
     const rows = 20;
     const cols = 20;
     const numbersPerPage = rows * cols;
-    const totalPages = Math.ceil(2000 / numbersPerPage); // 5 páginas
+    const totalPages = Math.ceil(TOTAL_NUMBERS / numbersPerPage); // 5 páginas
     const startNumber = (currentPage - 1) * numbersPerPage + 1;
-    const endNumber = Math.min(currentPage * numbersPerPage, 2000);
+    const endNumber = Math.min(currentPage * numbersPerPage, TOTAL_NUMBERS);
 
     return (
       <div className="p-4">
         {/* Indicador de página y navegación superior */}
         <div className="flex justify-between items-center mb-4">
           <div className="text-lg font-bold text-gray-700">
-            Números {startNumber} - {endNumber} de 2000
+            Números {startNumber} - {endNumber} de {TOTAL_NUMBERS}
           </div>
           
           <div className="flex items-center gap-2">
@@ -726,7 +751,7 @@ const RifasApp = () => {
           <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${cols}, minmax(40px, 1fr))` }}>
             {Array.from({ length: numbersPerPage }, (_, index) => {
               const number = startNumber + index;
-              if (number > 2000) return null; // Por si acaso
+              if (number > TOTAL_NUMBERS) return null; // Por si acaso
               
               const status = getNumberStatus(number);
               
@@ -1052,12 +1077,12 @@ const RifasApp = () => {
           <div className="w-full bg-gray-200 rounded-full h-4 mb-4">
             <div 
               className="bg-green-500 h-4 rounded-full transition-all duration-300"
-              style={{ width: `${(totalSold / 2000) * 100}%` }}
+              style={{ width: `${(totalSold / TOTAL_NUMBERS) * 100}%` }}
             />
           </div>
           <div className="flex justify-between text-sm text-gray-600">
-            <span>{totalSold} / 2000 vendidos</span>
-            <span>{((totalSold / 2000) * 100).toFixed(1)}% completado</span>
+            <span>{totalSold} / {TOTAL_NUMBERS} vendidos</span>
+            <span>{((totalSold / TOTAL_NUMBERS) * 100).toFixed(1)}% completado</span>
           </div>
         </div>
 
@@ -1166,7 +1191,7 @@ const RifasApp = () => {
                 🎫 Rifa Escolar 2024
               </h1>
               <p className="text-gray-600 mt-1">
-                Selecciona tus números de la suerte • {numbers.filter(n => n.status === 'sold').length}/2000 vendidos
+                Selecciona tus números de la suerte • {numbers.filter(n => n.status === 'sold').length}/{TOTAL_NUMBERS} vendidos
               </p>
             </div>
             <div className="flex gap-2">
