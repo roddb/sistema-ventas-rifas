@@ -239,36 +239,97 @@ export class RaffleService {
   // Liberar números reservados que expiraron (más de 15 minutos)
   static async releaseExpiredReservations() {
     if (!this.isDbAvailable()) {
-      return null;
+      return { releasedNumbers: 0, cancelledPurchases: 0 };
     }
     
     const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
     
-    const result = await db
-      .update(raffleNumbers)
-      .set({
-        status: 'available',
-        reservedAt: null,
-        purchaseId: null,
-        updatedAt: new Date()
-      })
-      .where(
-        and(
-          eq(raffleNumbers.status, 'reserved'),
-          lte(raffleNumbers.reservedAt, fifteenMinutesAgo)
-        )
-      );
-    
-    // Log del evento (sin purchaseId)
-    await db.insert(eventLogs).values({
-      eventType: 'EXPIRED_RESERVATIONS_RELEASED',
-      data: JSON.stringify({ 
-        releasedAt: new Date(),
-        fifteenMinutesAgo 
-      })
-    });
-    
-    return result;
+    try {
+      // Primero, encontrar purchases pendientes expiradas
+      const expiredPurchases = await db
+        .select()
+        .from(purchases)
+        .where(
+          and(
+            eq(purchases.paymentStatus, 'pending'),
+            lte(purchases.createdAt, fifteenMinutesAgo)
+          )
+        );
+      
+      let cancelledPurchases = 0;
+      let releasedNumbers = 0;
+      
+      // Cancelar cada purchase expirada
+      for (const purchase of expiredPurchases) {
+        // Liberar números asociados
+        const result = await db
+          .update(raffleNumbers)
+          .set({
+            status: 'available',
+            reservedAt: null,
+            purchaseId: null,
+            soldAt: null,
+            updatedAt: new Date()
+          })
+          .where(eq(raffleNumbers.purchaseId, purchase.id));
+        
+        // Actualizar estado de la compra
+        await db
+          .update(purchases)
+          .set({
+            paymentStatus: 'cancelled',
+            updatedAt: new Date()
+          })
+          .where(eq(purchases.id, purchase.id));
+        
+        // Log del evento
+        await db.insert(eventLogs).values({
+          eventType: 'RESERVATION_EXPIRED',
+          purchaseId: purchase.id,
+          data: JSON.stringify({ 
+            expiredAt: new Date(),
+            createdAt: purchase.createdAt,
+            buyerName: purchase.buyerName
+          })
+        });
+        
+        cancelledPurchases++;
+        console.log(`Released expired reservation for purchase: ${purchase.id}`);
+      }
+      
+      // También liberar números reservados sin purchase asociada (por si acaso)
+      const orphanedNumbers = await db
+        .update(raffleNumbers)
+        .set({
+          status: 'available',
+          reservedAt: null,
+          purchaseId: null,
+          updatedAt: new Date()
+        })
+        .where(
+          and(
+            eq(raffleNumbers.status, 'reserved'),
+            lte(raffleNumbers.reservedAt, fifteenMinutesAgo)
+          )
+        );
+      
+      // Log del evento general si hubo liberaciones
+      if (cancelledPurchases > 0 || orphanedNumbers) {
+        await db.insert(eventLogs).values({
+          eventType: 'EXPIRED_RESERVATIONS_RELEASED',
+          data: JSON.stringify({ 
+            releasedAt: new Date(),
+            cancelledPurchases,
+            message: `Released ${cancelledPurchases} expired purchases`
+          })
+        });
+      }
+      
+      return { releasedNumbers, cancelledPurchases };
+    } catch (error) {
+      console.error('Error releasing expired reservations:', error);
+      return { releasedNumbers: 0, cancelledPurchases: 0 };
+    }
   }
 
   // Obtener estadísticas

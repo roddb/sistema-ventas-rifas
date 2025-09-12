@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ShoppingCart, User, School, Phone, Mail, CreditCard, Check, X, Clock, AlertCircle, Database, Settings, BarChart3, RefreshCw, Download } from 'lucide-react';
+import { ShoppingCart, User, School, Phone, Mail, CreditCard, Check, X, Clock, AlertCircle, Database, Settings, BarChart3, RefreshCw, Download, ArrowLeft } from 'lucide-react';
 
 // =========== CONFIGURACIÓN Y TIPOS ===========
 
@@ -191,6 +191,28 @@ const apiService = {
       throw error;
     }
   },
+  
+  // Cancelar compra/reserva manualmente
+  async cancelPurchase(purchaseId: string): Promise<{ success: boolean }> {
+    try {
+      const response = await fetch(`${API_BASE}/purchase/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ purchaseId })
+      });
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error('API Error:', response.status, errorData);
+        throw new Error(`Error al cancelar compra: ${response.status}`);
+      }
+      const data = await response.json();
+      console.log('Purchase cancelled:', data);
+      return data;
+    } catch (error) {
+      console.error('Error cancelling purchase:', error);
+      throw error;
+    }
+  },
 
   // Verificar estado de pago
   async checkPaymentStatus(paymentId: string): Promise<{ status: string; paymentMethod?: string }> {
@@ -300,6 +322,7 @@ interface PersonalDataFormProps {
   setCurrentStep: React.Dispatch<React.SetStateAction<'selection' | 'form' | 'payment' | 'confirmation'>>;
   handleFormSubmit: () => void;
   selectedNumbers: Set<number>;
+  setSelectedNumbers: React.Dispatch<React.SetStateAction<Set<number>>>;
   PRICE_PER_NUMBER: number;
   loading: boolean;
 }
@@ -311,6 +334,7 @@ const PersonalDataForm: React.FC<PersonalDataFormProps> = ({
   setCurrentStep, 
   handleFormSubmit, 
   selectedNumbers, 
+  setSelectedNumbers,
   PRICE_PER_NUMBER,
   loading 
 }) => {
@@ -326,12 +350,39 @@ const PersonalDataForm: React.FC<PersonalDataFormProps> = ({
           <User className="mr-2" />
           Datos Personales
         </h2>
-        <button
-          onClick={() => setCurrentStep('selection')}
-          className="text-gray-500 hover:text-gray-700 p-1"
-        >
-          <X size={24} />
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setCurrentStep('selection');
+              // No cancelar reserva aquí, solo volver atrás
+            }}
+            className="text-blue-500 hover:text-blue-700 flex items-center px-3 py-1 rounded-lg hover:bg-blue-50"
+          >
+            <ArrowLeft className="mr-1" size={16} />
+            Volver
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setCurrentStep('selection');
+              setSelectedNumbers(new Set());
+              setFormData({
+                buyerName: '',
+                studentName: '',
+                division: '',
+                course: '',
+                email: '',
+                phone: ''
+              });
+            }}
+            className="text-red-500 hover:text-red-700 flex items-center px-3 py-1 rounded-lg hover:bg-red-50"
+            disabled={loading}
+          >
+            <X className="mr-1" size={16} />
+            Cancelar
+          </button>
+        </div>
       </div>
 
       <form onSubmit={(e) => { e.preventDefault(); handleFormSubmit(); }}>
@@ -1363,6 +1414,7 @@ const RifasApp = () => {
             setCurrentStep={setCurrentStep}
             handleFormSubmit={handleFormSubmit}
             selectedNumbers={selectedNumbers}
+            setSelectedNumbers={setSelectedNumbers}
             PRICE_PER_NUMBER={PRICE_PER_NUMBER}
             loading={loading}
           />

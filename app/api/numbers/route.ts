@@ -6,6 +6,12 @@ export const revalidate = 0;
 
 export async function GET() {
   try {
+    // Limpiar reservas expiradas antes de devolver números
+    const cleanupResult = await RaffleService.releaseExpiredReservations();
+    if (cleanupResult.cancelledPurchases > 0) {
+      console.log(`Cleaned up ${cleanupResult.cancelledPurchases} expired reservations`);
+    }
+    
     // Obtener rifa activa
     const raffle = await RaffleService.getActiveRaffle();
     if (!raffle) {
