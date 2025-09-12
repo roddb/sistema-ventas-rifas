@@ -298,7 +298,7 @@ export class RaffleService {
       }
       
       // También liberar números reservados sin purchase asociada (por si acaso)
-      const orphanedNumbers = await db
+      await db
         .update(raffleNumbers)
         .set({
           status: 'available',
@@ -313,17 +313,8 @@ export class RaffleService {
           )
         );
       
-      // Log del evento general si hubo liberaciones
-      if (cancelledPurchases > 0 || orphanedNumbers) {
-        await db.insert(eventLogs).values({
-          eventType: 'EXPIRED_RESERVATIONS_RELEASED',
-          data: JSON.stringify({ 
-            releasedAt: new Date(),
-            cancelledPurchases,
-            message: `Released ${cancelledPurchases} expired purchases`
-          })
-        });
-      }
+      // Solo registrar en log si realmente se cancelaron purchases
+      // Los logs individuales ya se crearon arriba para cada purchase cancelada
       
       return { releasedNumbers, cancelledPurchases };
     } catch (error) {
