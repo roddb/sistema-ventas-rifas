@@ -128,13 +128,48 @@ async function handlePaymentNotification(paymentId: string, action?: string) {
       return;
     }
     
-    // 3. Actualizar nuestra base de datos según el estado
+    // 3. NUEVO: Verificar que los números siguen reservados para esta compra antes de confirmar
     if (paymentInfo.status === 'approved') {
-      console.log(`Payment approved! Confirming purchase ${purchaseId}`);
+      console.log(`Payment approved! Verifying purchase ${purchaseId} before confirming...`);
+      
+      // Obtener la compra actual
+      const { db, schema } = await import('@/lib/db');
+      const { eq } = await import('drizzle-orm');
+      
+      const [purchase] = await db
+        .select()
+        .from(schema.purchases)
+        .where(eq(schema.purchases.id, purchaseId))
+        .limit(1);
+      
+      if (!purchase) {
+        console.error(`Purchase ${purchaseId} not found!`);
+        // TODO: Considerar reembolso automático aquí
+        return;
+      }
+      
+      // Verificar que los números siguen reservados para esta compra
+      const reservedNumbers = await db
+        .select()
+        .from(schema.raffleNumbers)
+        .where(eq(schema.raffleNumbers.purchaseId, purchaseId));
+      
+      if (reservedNumbers.length !== purchase.numbersCount) {
+        console.error(`Mismatch in reserved numbers! Expected ${purchase.numbersCount}, found ${reservedNumbers.length}`);
+        // Los números pudieron haber sido liberados por timeout
+        // TODO: Considerar reembolso automático
+        console.log('Numbers may have been released due to timeout. Manual intervention required.');
+        return;
+      }
+      
+      // Todo OK, confirmar el pago
       await RaffleService.confirmPayment(purchaseId, {
         paymentMethod: paymentInfo.paymentMethod?.id || 'mercadopago',
         mercadoPagoPaymentId: paymentId
       });
+      
+      console.log(`Purchase ${purchaseId} confirmed successfully`);
+      
     } else if (paymentInfo.status === 'rejected' || paymentInfo.status === 'cancelled') {
       console.log(`Payment ${paymentInfo.status}. Cancelling purchase ${purchaseId}`);
       await RaffleService.cancelPayment(purchaseId);

@@ -99,21 +99,36 @@ const apiService = {
   },
 
   // Crear compra y reservar números
-  async createPurchase(purchaseData: any): Promise<{ success: boolean; purchaseId: string; reservationId: string }> {
+  async createPurchase(purchaseData: any): Promise<{ 
+    success: boolean; 
+    purchaseId?: string; 
+    reservationId?: string;
+    error?: string;
+    unavailableNumbers?: number[];
+    message?: string;
+  }> {
     try {
       const response = await fetch(`${API_BASE}/purchase`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(purchaseData)
       });
-      if (!response.ok) {
-        const errorData = await response.text();
-        console.error('API Error:', response.status, errorData);
-        throw new Error(`Error al crear compra: ${response.status}`);
-      }
+      
       const data = await response.json();
+      
+      if (!response.ok) {
+        console.error('API Error:', response.status, data);
+        // Retornar el error con la estructura esperada
+        return {
+          success: false,
+          error: data.error || `Error al crear compra: ${response.status}`,
+          unavailableNumbers: data.unavailableNumbers,
+          message: data.message
+        };
+      }
+      
       console.log('Purchase created:', data);
-      return data;
+      return { ...data, success: true };
     } catch (error) {
       console.error('Error creating purchase:', error);
       throw error;
@@ -214,6 +229,30 @@ const apiService = {
     }
   },
 
+  // Verificar disponibilidad de números
+  async verifyAvailability(numbers: number[]): Promise<{ available: boolean; unavailableNumbers: number[] }> {
+    try {
+      const response = await fetch(`${API_BASE}/numbers/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ numbers: Array.from(numbers) })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Error al verificar disponibilidad');
+      }
+      
+      const data = await response.json();
+      return {
+        available: data.available,
+        unavailableNumbers: data.unavailableNumbers || []
+      };
+    } catch (error) {
+      console.error('Error verifying availability:', error);
+      return { available: true, unavailableNumbers: [] }; // Asumir disponible en caso de error
+    }
+  },
+  
   // Verificar estado de pago
   async checkPaymentStatus(paymentId: string): Promise<{ status: string; paymentMethod?: string }> {
     await new Promise(resolve => setTimeout(resolve, 300));
@@ -558,14 +597,33 @@ const RifasApp = () => {
   useEffect(() => {
     loadNumbers();
     
-    // Actualizar números cada 30 segundos para reflejar cambios de otros usuarios
+    // MEJORADO: Actualizar números cada 10 segundos para mejor sincronización
     const interval = setInterval(() => {
       console.log('Auto-refreshing numbers...');
       loadNumbers();
-    }, 30000);
+      
+      // Si hay números seleccionados, verificar si siguen disponibles
+      if (selectedNumbers.size > 0 && currentStep === 'selection') {
+        const unavailable = Array.from(selectedNumbers).filter(num => {
+          const status = getNumberStatus(num);
+          return status === 'sold' || status === 'reserved';
+        });
+        
+        if (unavailable.length > 0) {
+          // Alertar al usuario que algunos números ya no están disponibles
+          setError(`¡Atención! Los números ${unavailable.join(', ')} ya fueron reservados por otro usuario.`);
+          // Deseleccionar números no disponibles
+          setSelectedNumbers(prev => {
+            const newSet = new Set(prev);
+            unavailable.forEach(num => newSet.delete(num));
+            return newSet;
+          });
+        }
+      }
+    }, 10000); // Reducido de 30s a 10s
     
     return () => clearInterval(interval);
-  }, [loadNumbers]);
+  }, [loadNumbers, selectedNumbers, currentStep, getNumberStatus]);
 
   // Manejar retorno desde MercadoPago
   useEffect(() => {
@@ -668,6 +726,29 @@ const RifasApp = () => {
     
     try {
       setLoading(true);
+      setError(null);
+      
+      // NUEVO: Verificar disponibilidad una última vez antes de proceder
+      await loadNumbers(); // Actualizar estado actual
+      
+      const numbersArray = Array.from(selectedNumbers).sort((a, b) => a - b);
+      const unavailable = numbersArray.filter(num => {
+        const status = getNumberStatus(num);
+        return status !== 'available' && status !== 'selected';
+      });
+      
+      if (unavailable.length > 0) {
+        setError(`Los números ${unavailable.join(', ')} ya no están disponibles. Por favor, selecciona otros números.`);
+        setLoading(false);
+        setCurrentStep('selection');
+        // Deseleccionar números no disponibles
+        setSelectedNumbers(prev => {
+          const newSet = new Set(prev);
+          unavailable.forEach(num => newSet.delete(num));
+          return newSet;
+        });
+        return;
+      }
       
       // Crear compra y reservar números en la base de datos
       const purchaseData = {
@@ -679,12 +760,27 @@ const RifasApp = () => {
       const result = await apiService.createPurchase(purchaseData);
       
       if (!result.success) {
-        throw new Error('Error al procesar la compra');
+        // Manejar error de conflicto (números no disponibles)
+        if (result.unavailableNumbers) {
+          setError(`Los números ${result.unavailableNumbers.join(', ')} ya fueron reservados. Por favor, actualiza y selecciona otros.`);
+          setCurrentStep('selection');
+          // Recargar números para ver estado actualizado
+          await loadNumbers();
+          // Limpiar selección de números no disponibles
+          setSelectedNumbers(prev => {
+            const newSet = new Set(prev);
+            result.unavailableNumbers?.forEach((num: number) => newSet.delete(num));
+            return newSet;
+          });
+          setLoading(false);
+          return;
+        }
+        throw new Error(result.error || 'Error al procesar la compra');
       }
       
       // Crear objeto de compra para mostrar
       const purchase: Purchase = {
-        id: result.purchaseId,
+        id: result.purchaseId!,  // Sabemos que existe si success es true
         ...formData,
         numbers: purchaseData.numbers,
         totalAmount: purchaseData.totalAmount,
@@ -707,10 +803,18 @@ const RifasApp = () => {
       console.log('Redirecting to MercadoPago checkout...');
       window.location.href = mpPreference.initPoint;
       
-    } catch (err) {
-      setError('Error procesando la compra');
-      console.error(err);
-    } finally {
+    } catch (err: any) {
+      console.error('Error procesando la compra:', err);
+      
+      // Manejar errores específicos de disponibilidad
+      if (err.message?.includes('no están disponibles')) {
+        setError(err.message);
+        setCurrentStep('selection');
+        await loadNumbers(); // Recargar para ver estado actual
+      } else {
+        setError(err.message || 'Error al procesar la compra. Por favor, intenta nuevamente.');
+      }
+      
       setLoading(false);
     }
   };

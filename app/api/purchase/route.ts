@@ -37,13 +37,42 @@ export async function POST(request: Request) {
       });
     }
     
-    // Reservar números
-    console.log('Reserving numbers:', data.numbers);
-    const reservationId = await RaffleService.reserveNumbers(raffle.id, data.numbers);
-    console.log('Reservation ID:', reservationId);
+    // NUEVO: Verificar disponibilidad ANTES de intentar reservar
+    console.log('Verifying availability for numbers:', data.numbers);
+    const availability = await RaffleService.verifyNumbersAvailable(raffle.id, data.numbers);
     
-    // Crear compra
-    console.log('Creating purchase...');
+    if (!availability.available) {
+      console.log('Numbers not available:', availability.unavailableNumbers);
+      return NextResponse.json(
+        { 
+          error: 'Algunos números ya no están disponibles',
+          unavailableNumbers: availability.unavailableNumbers,
+          message: `Los números ${availability.unavailableNumbers.join(', ')} ya fueron reservados por otro usuario. Por favor, actualiza la página y selecciona otros números.`
+        },
+        { status: 409 } // 409 Conflict
+      );
+    }
+    
+    // Reservar números con validación mejorada
+    console.log('Reserving numbers:', data.numbers);
+    const reservationResult = await RaffleService.reserveNumbers(raffle.id, data.numbers);
+    
+    if (!reservationResult.success) {
+      console.error('Failed to reserve numbers:', reservationResult);
+      return NextResponse.json(
+        { 
+          error: 'No se pudieron reservar los números',
+          failedNumbers: reservationResult.failedNumbers,
+          message: 'Algunos números ya no están disponibles. Por favor, actualiza la página.'
+        },
+        { status: 409 }
+      );
+    }
+    
+    console.log('Reservation successful:', reservationResult.reservationId);
+    
+    // Crear compra con el ID de reserva para mantener consistencia
+    console.log('Creating purchase with reservation ID...');
     const purchaseId = await RaffleService.createPurchase({
       raffleId: raffle.id,
       buyerName: data.buyerName,
@@ -53,30 +82,46 @@ export async function POST(request: Request) {
       email: data.email,
       phone: data.phone,
       numberIds: data.numbers,
-      totalAmount: data.totalAmount
+      totalAmount: data.totalAmount,
+      reservationId: reservationResult.reservationId // Pasar el ID de reserva
     });
     
-    // NO confirmar automáticamente - esperar a que el frontend simule el pago
-    console.log(`Purchase ${purchaseId} created. Waiting for payment confirmation...`);
+    console.log(`Purchase ${purchaseId} created successfully. Waiting for payment confirmation...`);
     
     return NextResponse.json({
       success: true,
       purchaseId,
-      reservationId
+      reservationId: reservationResult.reservationId,
+      reservedNumbers: reservationResult.reservedNumbers
     });
+    
   } catch (error) {
     console.error('Error creating purchase:', error);
     console.error('Error stack:', error instanceof Error ? error.stack : 'No stack');
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Invalid request data', details: error.errors },
+        { error: 'Datos de formulario inválidos', details: error.errors },
         { status: 400 }
       );
     }
     
+    // Manejar errores específicos de disponibilidad
+    if (error instanceof Error && error.message.includes('no están disponibles')) {
+      return NextResponse.json(
+        { 
+          error: error.message,
+          userMessage: error.message
+        },
+        { status: 409 }
+      );
+    }
+    
     return NextResponse.json(
-      { error: 'Failed to create purchase' },
+      { 
+        error: 'Error al procesar la compra. Por favor, intenta nuevamente.',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     );
   }

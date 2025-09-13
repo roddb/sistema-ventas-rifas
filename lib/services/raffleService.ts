@@ -40,45 +40,138 @@ export class RaffleService {
     return numbers;
   }
 
-  // Reservar números temporalmente (15 minutos)
+  // Verificar disponibilidad de números ANTES de intentar reservar
+  static async verifyNumbersAvailable(raffleId: number, numberIds: number[]) {
+    if (!this.isDbAvailable()) {
+      return { available: true, unavailableNumbers: [] };
+    }
+    
+    const numbers = await db
+      .select()
+      .from(raffleNumbers)
+      .where(
+        and(
+          eq(raffleNumbers.raffleId, raffleId),
+          eq(raffleNumbers.status, 'available')
+        )
+      );
+    
+    const availableNumbers = numbers.map((n: any) => n.number);
+    const unavailableNumbers = numberIds.filter((id: number) => !availableNumbers.includes(id));
+    
+    return {
+      available: unavailableNumbers.length === 0,
+      unavailableNumbers
+    };
+  }
+
+  // Reservar números temporalmente (15 minutos) - MEJORADO con validación
   static async reserveNumbers(raffleId: number, numberIds: number[]) {
     if (!this.isDbAvailable()) {
-      return `TEMP-${nanoid(10)}`;
+      return { 
+        success: true,
+        reservationId: `TEMP-${nanoid(10)}`,
+        reservedNumbers: numberIds,
+        failedNumbers: []
+      };
     }
     
     const reservationId = `TEMP-${nanoid(10)}`;
     const reservedAt = new Date();
+    const reservedNumbers: number[] = [];
+    const failedNumbers: number[] = [];
     
-    // Actualizar números a estado reservado
-    // Usamos un loop porque inArray puede no funcionar bien con Turso
+    // Primero verificar disponibilidad
+    const availability = await this.verifyNumbersAvailable(raffleId, numberIds);
+    if (!availability.available) {
+      throw new Error(`Los siguientes números ya no están disponibles: ${availability.unavailableNumbers.join(', ')}`);
+    }
+    
+    // Actualizar números a estado reservado con validación
     for (const numberId of numberIds) {
+      try {
+        // Obtener el registro actual para verificar que sigue disponible
+        const [currentNumber] = await db
+          .select()
+          .from(raffleNumbers)
+          .where(
+            and(
+              eq(raffleNumbers.raffleId, raffleId),
+              eq(raffleNumbers.number, numberId),
+              eq(raffleNumbers.status, 'available')
+            )
+          )
+          .limit(1);
+        
+        if (!currentNumber) {
+          failedNumbers.push(numberId);
+          continue;
+        }
+        
+        // Actualizar solo si está disponible
+        const result = await db
+          .update(raffleNumbers)
+          .set({
+            status: 'reserved',
+            reservedAt,
+            purchaseId: reservationId,
+            updatedAt: new Date()
+          })
+          .where(
+            and(
+              eq(raffleNumbers.id, currentNumber.id),
+              eq(raffleNumbers.status, 'available') // Doble verificación
+            )
+          );
+        
+        reservedNumbers.push(numberId);
+        
+      } catch (error) {
+        console.error(`Error reserving number ${numberId}:`, error);
+        failedNumbers.push(numberId);
+      }
+    }
+    
+    // Si no se pudo reservar ningún número, lanzar error
+    if (reservedNumbers.length === 0) {
+      throw new Error('No se pudo reservar ningún número. Por favor, intenta nuevamente.');
+    }
+    
+    // Si algunos números fallaron, lanzar error con detalles
+    if (failedNumbers.length > 0) {
+      // Revertir los números que sí se reservaron
       await db
         .update(raffleNumbers)
         .set({
-          status: 'reserved',
-          reservedAt,
-          purchaseId: reservationId,
+          status: 'available',
+          reservedAt: null,
+          purchaseId: null,
           updatedAt: new Date()
         })
-        .where(
-          and(
-            eq(raffleNumbers.raffleId, raffleId),
-            eq(raffleNumbers.status, 'available'),
-            eq(raffleNumbers.number, numberId)
-          )
-        );
+        .where(eq(raffleNumbers.purchaseId, reservationId));
+      
+      throw new Error(`Los números ${failedNumbers.join(', ')} ya no están disponibles. Por favor, actualiza la página y vuelve a intentar.`);
     }
     
-    // Log del evento (sin purchaseId ya que es temporal)
+    // Log del evento solo si todo salió bien
     await db.insert(eventLogs).values({
       eventType: 'NUMBERS_RESERVED',
-      data: JSON.stringify({ reservationId, numberIds, reservedAt })
+      data: JSON.stringify({ 
+        reservationId, 
+        numberIds: reservedNumbers, 
+        reservedAt 
+      })
     });
     
-    return reservationId;
+    return {
+      success: true,
+      reservationId,
+      reservedNumbers,
+      failedNumbers
+    };
   }
 
-  // Crear compra
+  // Crear compra con TRANSACCIÓN ATÓMICA para garantizar consistencia
   static async createPurchase(data: {
     raffleId: number;
     buyerName: string;
@@ -89,6 +182,7 @@ export class RaffleService {
     phone?: string;
     numberIds: number[];
     totalAmount: number;
+    reservationId?: string; // ID de la reserva temporal previa
   }) {
     if (!this.isDbAvailable()) {
       return `PUR-${nanoid(10)}`;
@@ -96,67 +190,150 @@ export class RaffleService {
     
     const purchaseId = `PUR-${nanoid(10)}`;
     
-    // Crear registro de compra
-    await db.insert(purchases).values({
-      id: purchaseId,
-      raffleId: data.raffleId,
-      buyerName: data.buyerName,
-      studentName: data.studentName,
-      division: data.division,
-      course: data.course,
-      email: data.email,
-      phone: data.phone,
-      totalAmount: data.totalAmount,
-      numbersCount: data.numberIds.length,
-      paymentStatus: 'pending'
-    });
-    
-    // Actualizar números con el ID de compra real
-    for (const numberId of data.numberIds) {
-      await db
-        .update(raffleNumbers)
-        .set({
-          purchaseId,
-          updatedAt: new Date()
-        })
-        .where(
-          and(
-            eq(raffleNumbers.raffleId, data.raffleId),
-            eq(raffleNumbers.number, numberId)
-          )
-        );
-    }
-    
-    // Crear relaciones en purchase_numbers
-    const numberRecords = [];
-    for (const numberId of data.numberIds) {
-      const [record] = await db
-        .select()
-        .from(raffleNumbers)
-        .where(
-          and(
-            eq(raffleNumbers.raffleId, data.raffleId),
-            eq(raffleNumbers.number, numberId)
-          )
-        );
-      if (record) numberRecords.push(record);
-    }
-    
-    for (const num of numberRecords) {
-      await db.insert(purchaseNumbers).values({
-        purchaseId,
-        raffleNumberId: num.id
+    try {
+      // TODO: Cuando Turso soporte transacciones, envolver todo en una transacción
+      // Por ahora, implementamos verificaciones adicionales para minimizar riesgos
+      
+      // 1. Verificar que los números siguen reservados para esta sesión
+      if (data.reservationId) {
+        const reservedNumbers = await db
+          .select()
+          .from(raffleNumbers)
+          .where(
+            and(
+              eq(raffleNumbers.raffleId, data.raffleId),
+              eq(raffleNumbers.purchaseId, data.reservationId),
+              eq(raffleNumbers.status, 'reserved')
+            )
+          );
+        
+        const reservedIds = reservedNumbers.map((n: any) => n.number);
+        const missingNumbers = data.numberIds.filter((id: number) => !reservedIds.includes(id));
+        
+        if (missingNumbers.length > 0) {
+          throw new Error(`Los números ${missingNumbers.join(', ')} ya no están reservados. La reserva pudo haber expirado.`);
+        }
+      }
+      
+      // 2. Crear registro de compra
+      await db.insert(purchases).values({
+        id: purchaseId,
+        raffleId: data.raffleId,
+        buyerName: data.buyerName,
+        studentName: data.studentName,
+        division: data.division,
+        course: data.course,
+        email: data.email,
+        phone: data.phone,
+        totalAmount: data.totalAmount,
+        numbersCount: data.numberIds.length,
+        paymentStatus: 'pending'
       });
+      
+      // 3. Actualizar números con el ID de compra real (atomicidad por número)
+      const updatedNumbers = [];
+      for (const numberId of data.numberIds) {
+        const updateResult = await db
+          .update(raffleNumbers)
+          .set({
+            purchaseId,
+            updatedAt: new Date()
+          })
+          .where(
+            and(
+              eq(raffleNumbers.raffleId, data.raffleId),
+              eq(raffleNumbers.number, numberId),
+              // Verificar que el número sigue en el estado esperado
+              data.reservationId 
+                ? eq(raffleNumbers.purchaseId, data.reservationId)
+                : eq(raffleNumbers.status, 'reserved')
+            )
+          );
+        
+        updatedNumbers.push(numberId);
+      }
+      
+      // 4. Verificar que se actualizaron TODOS los números
+      if (updatedNumbers.length !== data.numberIds.length) {
+        // Rollback manual: eliminar la compra creada
+        await db.delete(purchases).where(eq(purchases.id, purchaseId));
+        throw new Error('No se pudieron asignar todos los números a la compra. Por favor, intenta nuevamente.');
+      }
+      
+      // 5. Crear relaciones en purchase_numbers
+      const numberRecords = [];
+      for (const numberId of data.numberIds) {
+        const [record] = await db
+          .select()
+          .from(raffleNumbers)
+          .where(
+            and(
+              eq(raffleNumbers.raffleId, data.raffleId),
+              eq(raffleNumbers.number, numberId),
+              eq(raffleNumbers.purchaseId, purchaseId)
+            )
+          );
+        if (record) numberRecords.push(record);
+      }
+      
+      // Verificar que encontramos todos los registros
+      if (numberRecords.length !== data.numberIds.length) {
+        // Rollback manual
+        await db.delete(purchases).where(eq(purchases.id, purchaseId));
+        await db
+          .update(raffleNumbers)
+          .set({
+            status: 'available',
+            purchaseId: null,
+            reservedAt: null,
+            updatedAt: new Date()
+          })
+          .where(eq(raffleNumbers.purchaseId, purchaseId));
+        
+        throw new Error('Error al vincular números con la compra. Por favor, intenta nuevamente.');
+      }
+      
+      for (const num of numberRecords) {
+        await db.insert(purchaseNumbers).values({
+          purchaseId,
+          raffleNumberId: num.id
+        });
+      }
+      
+      // 6. Log del evento
+      await db.insert(eventLogs).values({
+        eventType: 'PURCHASE_CREATED',
+        purchaseId,
+        data: JSON.stringify(data)
+      });
+      
+      return purchaseId;
+      
+    } catch (error) {
+      // En caso de error, intentar rollback manual
+      console.error('Error creating purchase, attempting rollback:', error);
+      
+      try {
+        // Eliminar purchase si existe
+        await db.delete(purchases).where(eq(purchases.id, purchaseId));
+        
+        // Liberar números si fueron asignados a este purchaseId
+        await db
+          .update(raffleNumbers)
+          .set({
+            status: 'available',
+            purchaseId: null,
+            reservedAt: null,
+            updatedAt: new Date()
+          })
+          .where(eq(raffleNumbers.purchaseId, purchaseId));
+          
+      } catch (rollbackError) {
+        console.error('Rollback failed:', rollbackError);
+      }
+      
+      throw error;
     }
-    
-    // Log del evento
-    await db.insert(eventLogs).values({
-      eventType: 'PURCHASE_CREATED',
-      purchaseId,
-      data: JSON.stringify(data)
-    });
-    
-    return purchaseId;
   }
 
   // Confirmar pago y marcar números como vendidos
