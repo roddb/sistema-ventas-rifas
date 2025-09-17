@@ -3,7 +3,7 @@
  * Simula múltiples usuarios tratando de comprar los mismos números simultáneamente
  */
 
-const BASE_URL = 'http://localhost:3000/api';
+const BASE_URL = 'http://localhost:3001/api';
 
 // Colores para la consola
 const colors = {

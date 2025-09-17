@@ -589,8 +589,8 @@ const RifasApp = () => {
   const [reservationTimer, setReservationTimer] = useState<number>(0);
 
   // Usar valores dinámicos de la BD o valores por defecto
-  const PRICE_PER_NUMBER = raffleConfig?.pricePerNumber || 500;
-  const TOTAL_NUMBERS = raffleConfig?.totalNumbers || 2000;
+  const PRICE_PER_NUMBER = raffleConfig?.pricePerNumber || 1000;
+  const TOTAL_NUMBERS = raffleConfig?.totalNumbers || 1500;
   const RESERVATION_TIMEOUT = 15 * 60; // 15 minutos en segundos
 
   // Cargar números al montar el componente y actualizar periódicamente

@@ -9,7 +9,7 @@
  * 3. Muestra los resultados
  */
 
-const BASE_URL = 'http://localhost:3000/api';
+const BASE_URL = 'http://localhost:3001/api';
 
 // Función para resetear números antes de cada prueba
 async function resetTestNumbers(numbers) {

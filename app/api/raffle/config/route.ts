@@ -15,8 +15,8 @@ export async function GET() {
         id: null,
         title: 'Rifa de Desarrollo',
         description: 'Rifa de prueba',
-        totalNumbers: 2000,
-        pricePerNumber: 500,
+        totalNumbers: 1500,
+        pricePerNumber: 1000,
         startDate: new Date(),
         endDate: new Date(),
         isActive: false

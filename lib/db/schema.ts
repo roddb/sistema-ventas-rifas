@@ -5,7 +5,7 @@ export const raffles = sqliteTable('raffles', {
   id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }),
   title: text('title').notNull(),
   description: text('description'),
-  totalNumbers: integer('total_numbers').notNull().default(2000),
+  totalNumbers: integer('total_numbers').notNull().default(1500),
   pricePerNumber: real('price_per_number').notNull(),
   startDate: integer('start_date', { mode: 'timestamp' }).notNull(),
   endDate: integer('end_date', { mode: 'timestamp' }).notNull(),

@@ -503,7 +503,7 @@ export class RaffleService {
   // Obtener estadísticas
   static async getStats(raffleId: number) {
     if (!this.isDbAvailable()) {
-      return { total: 2000, sold: 0, reserved: 0, available: 2000 };
+      return { total: 1500, sold: 0, reserved: 0, available: 1500 };
     }
     
     const [stats] = await db

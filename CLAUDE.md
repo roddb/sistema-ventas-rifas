@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a school raffle ticket sales system with Next.js frontend, Drizzle ORM + Turso database, and MercadoPago payment integration. The system manages 2000 raffle numbers with reservation/purchase flow.
+This is a school raffle ticket sales system with Next.js frontend, Drizzle ORM + Turso database, and MercadoPago payment integration. The system manages 1500 raffle numbers with reservation/purchase flow.
 
 ## Tech Stack
 
@@ -29,7 +29,7 @@ This is a school raffle ticket sales system with Next.js frontend, Drizzle ORM +
 
 ### Frontend Components
 - **RifasApp**: Main React component with complete UI flow
-- **Number Grid**: 100x20 grid visualization (2000 numbers total)
+- **Number Grid**: Grid visualization (1500 numbers total)
 - **Multi-step purchase flow**: Selection → Form → Payment → Confirmation
 - **Admin Panel**: Sales metrics and purchase tracking
 
