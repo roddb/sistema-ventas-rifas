@@ -707,7 +707,12 @@ const RifasApp = () => {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const getNumberColor = (status: string) => {
+  const getNumberColor = (status: string, purchaseId?: string) => {
+    // Si es un número bloqueado para venta manual, color violeta
+    if (status === 'sold' && purchaseId?.startsWith('ADMIN-BLOCK')) {
+      return 'bg-purple-500 text-white cursor-not-allowed opacity-60';
+    }
+
     switch (status) {
       case 'sold': return 'bg-red-500 text-white cursor-not-allowed opacity-50';
       case 'reserved': return 'bg-orange-400 text-white cursor-not-allowed opacity-70';
@@ -964,16 +969,17 @@ const RifasApp = () => {
             {Array.from({ length: numbersPerPage }, (_, index) => {
               const number = startNumber + index;
               if (number > TOTAL_NUMBERS) return null; // Por si acaso
-              
+
               const status = getNumberStatus(number);
-              
+              const raffleNumber = numbers.find(n => n.number === number);
+
               return (
                 <button
                   key={number}
                   onClick={() => toggleNumber(number)}
                   className={`
                     w-10 h-10 text-xs font-bold rounded flex items-center justify-center
-                    ${getNumberColor(status)}
+                    ${getNumberColor(status, raffleNumber?.purchaseId)}
                     ${status === 'sold' || status === 'reserved' ? '' : 'hover:shadow-lg'}
                   `}
                   disabled={status === 'sold' || status === 'reserved'}

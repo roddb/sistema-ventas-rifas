@@ -30,13 +30,20 @@ export class RaffleService {
     if (!this.isDbAvailable()) {
       return [];
     }
-    
+
     const numbers = await db
-      .select()
+      .select({
+        id: raffleNumbers.id,
+        number: raffleNumbers.number,
+        status: raffleNumbers.status,
+        reservedAt: raffleNumbers.reservedAt,
+        soldAt: raffleNumbers.soldAt,
+        purchaseId: raffleNumbers.purchaseId
+      })
       .from(raffleNumbers)
       .where(eq(raffleNumbers.raffleId, raffleId))
       .orderBy(raffleNumbers.number);
-    
+
     return numbers;
   }
 
