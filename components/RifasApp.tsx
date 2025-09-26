@@ -3,6 +3,9 @@ import { ShoppingCart, User, School, Phone, Mail, CreditCard, Check, X, Clock, A
 
 // =========== CONFIGURACIÓN Y TIPOS ===========
 
+// CONTROL DE CIERRE DE VENTAS - Cambiar a false para reactivar las ventas
+const VENTAS_CERRADAS = true;
+
 interface RaffleNumber {
   id: number;
   number: number;
@@ -899,7 +902,36 @@ const RifasApp = () => {
   // =========== NÚMERO GRID OPTIMIZADO (20x20) CON PAGINACIÓN ===========
   const NumberGrid = () => {
     const [currentPage, setCurrentPage] = useState(1);
-    
+
+    // Mostrar mensaje de cierre si las ventas están cerradas
+    if (VENTAS_CERRADAS) {
+      return (
+        <div className="flex flex-col justify-center items-center py-20 px-8">
+          <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-2xl p-12 shadow-xl text-center max-w-2xl">
+            <div className="mb-6">
+              <div className="inline-flex items-center justify-center w-20 h-20 bg-green-100 rounded-full mb-4">
+                <Check className="w-12 h-12 text-green-600" />
+              </div>
+            </div>
+            <h2 className="text-4xl font-bold text-gray-800 mb-4">
+              ¡Gracias por participar!
+            </h2>
+            <p className="text-xl text-gray-600 mb-6">
+              La venta de rifas ha finalizado
+            </p>
+            <div className="border-t border-gray-200 pt-6">
+              <p className="text-gray-500">
+                El sorteo se realizará próximamente
+              </p>
+              <p className="text-sm text-gray-400 mt-2">
+                ¡Mucha suerte a todos los participantes!
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     if (loading) {
       return (
         <div className="flex justify-center items-center h-64">
@@ -1411,25 +1443,27 @@ const RifasApp = () => {
                 Selecciona tus números de la suerte • {numbers.filter(n => n.status === 'sold').length}/{TOTAL_NUMBERS} vendidos
               </p>
             </div>
-            <div className="flex gap-2">
-              <button
-                onClick={loadNumbers}
-                disabled={loading}
-                className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 flex items-center disabled:opacity-50"
-              >
-                <RefreshCw className={`mr-1 ${loading ? 'animate-spin' : ''}`} size={16} />
-                Actualizar
-              </button>
-              {/* Botón Admin ocultado para usuarios finales
-              <button
-                onClick={() => setCurrentView('admin')}
-                className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-900 flex items-center"
-              >
-                <Settings className="mr-1" size={16} />
-                Admin
-              </button>
-              */}
-            </div>
+            {!VENTAS_CERRADAS && (
+              <div className="flex gap-2">
+                <button
+                  onClick={loadNumbers}
+                  disabled={loading}
+                  className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 flex items-center disabled:opacity-50"
+                >
+                  <RefreshCw className={`mr-1 ${loading ? 'animate-spin' : ''}`} size={16} />
+                  Actualizar
+                </button>
+                {/* Botón Admin ocultado para usuarios finales
+                <button
+                  onClick={() => setCurrentView('admin')}
+                  className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-900 flex items-center"
+                >
+                  <Settings className="mr-1" size={16} />
+                  Admin
+                </button>
+                */}
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -1490,29 +1524,33 @@ const RifasApp = () => {
           <>
             <Legend />
             <div className="grid lg:grid-cols-4 gap-6">
-              <div className="lg:col-span-3">
+              <div className={VENTAS_CERRADAS ? "lg:col-span-4" : "lg:col-span-3"}>
                 <div className="bg-white rounded-lg shadow-lg">
-                  <div className="p-4 border-b">
-                    <div className="flex justify-between items-center">
-                      <h2 className="text-lg font-bold text-gray-800">
-                        Seleccionar Números de Rifa
-                      </h2>
-                      <div className="flex items-center space-x-4 text-sm">
-                        <span className="text-green-600">
-                          ✓ {numbers.filter(n => n.status === 'available').length} disponibles
-                        </span>
-                        <span className="text-red-600">
-                          ✗ {numbers.filter(n => n.status === 'sold').length} vendidos
-                        </span>
+                  {!VENTAS_CERRADAS && (
+                    <div className="p-4 border-b">
+                      <div className="flex justify-between items-center">
+                        <h2 className="text-lg font-bold text-gray-800">
+                          Seleccionar Números de Rifa
+                        </h2>
+                        <div className="flex items-center space-x-4 text-sm">
+                          <span className="text-green-600">
+                            ✓ {numbers.filter(n => n.status === 'available').length} disponibles
+                          </span>
+                          <span className="text-red-600">
+                            ✗ {numbers.filter(n => n.status === 'sold').length} vendidos
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
                   <NumberGrid />
                 </div>
               </div>
-              <div className="lg:col-span-1">
-                <SelectionSummary />
-              </div>
+              {!VENTAS_CERRADAS && (
+                <div className="lg:col-span-1">
+                  <SelectionSummary />
+                </div>
+              )}
             </div>
           </>
         )}
