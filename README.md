@@ -1,218 +1,205 @@
-# Sistema de Ventas de Rifas Escolares 🎫
+# Sistema de Ventas de Rifas Escolares
 
-Sistema completo para gestión de venta de rifas escolares con 2000 números, integración de pagos con MercadoPago y base de datos Turso.
+Aplicación web para gestionar la venta de rifas con grilla interactiva, reservas temporales, integración real con MercadoPago Checkout Pro y BD edge en Turso.
 
-## 🚀 Características
+> Estado: producción para evento escolar 2025 (cerrado). Reactivado en 2026 para nueva edición — ver `ESTADO.md`.
 
-- ✅ Grilla interactiva de 100x20 (2000 números)
-- ✅ Sistema de reservas temporales (15 minutos)
-- ✅ Integración completa con MercadoPago
-- ✅ Base de datos SQLite Edge (Turso)
-- ✅ Panel de administración
-- ✅ Notificaciones por email
-- ✅ Diseño responsive
-- ✅ TypeScript + Next.js 14
+## Características
 
-## 📋 Requisitos Previos
+- Grilla interactiva configurable (default 2.000 números)
+- Sistema de reservas temporales con timeout de 15 min
+- Integración MercadoPago Checkout Pro + webhook IPN con verificación de firma
+- BD edge en Turso (libSQL) con Drizzle ORM
+- Lógica anti-sobreventa con tests de concurrencia automatizados
+- Panel admin con métricas y listado de compras
+- Auto-deploy en Vercel desde rama `main`
 
-- Node.js 18+ 
+## Stack
+
+Next.js 14 (App Router) · TypeScript strict · React 18 · Drizzle ORM · Turso · MercadoPago SDK 2 · Tailwind CSS · Zod
+
+## Requisitos
+
+- Node.js 18+
 - Cuenta en [Turso](https://turso.tech)
-- Cuenta en [MercadoPago](https://www.mercadopago.com.ar/developers)
-- Cuenta en [Vercel](https://vercel.com) (para deployment)
+- Cuenta en [MercadoPago Developers](https://www.mercadopago.com.ar/developers)
+- Cuenta en [Vercel](https://vercel.com) (para deploy)
 
-## 🛠️ Instalación Local
+## Instalación local
 
-1. **Clonar el repositorio**
 ```bash
+# 1. Clonar
 git clone https://github.com/roddb/sistema-ventas-rifas.git
-cd sistema-ventas-rifas
-```
+cd "Sistema de ventas de rifas"
 
-2. **Instalar dependencias**
-```bash
+# 2. Instalar dependencias
 npm install
+
+# 3. Variables de entorno
+cp .env.local.example .env.local
+# editar .env.local con credenciales válidas (ver más abajo)
+
+# 4. Crear BD Turso (primera vez)
+turso auth login
+turso db create rifas-db
+turso db show rifas-db --url
+turso db tokens create rifas-db
+# pegar URL y token en .env.local
+
+# 5. Aplicar migraciones
+npm run db:generate
+npm run db:migrate
+
+# 6. Dev server
+npm run dev
+# http://localhost:3000
 ```
 
-3. **Configurar variables de entorno**
+## Variables de entorno
 
-Copiar `.env.example` a `.env.local` y completar:
+Archivo `.env.local`:
 
 ```env
-# Turso Database
 TURSO_DATABASE_URL=libsql://your-database.turso.io
-TURSO_AUTH_TOKEN=your-turso-auth-token
+TURSO_AUTH_TOKEN=eyJhbGciOi...
 
-# MercadoPago
-MERCADO_PAGO_ACCESS_TOKEN=your-access-token
-MERCADO_PAGO_PUBLIC_KEY=your-public-key
-MERCADO_PAGO_WEBHOOK_SECRET=your-webhook-secret
+MERCADO_PAGO_ACCESS_TOKEN=APP_USR-...   # o TEST-... en sandbox
+MERCADO_PAGO_PUBLIC_KEY=APP_USR-...
+MERCADO_PAGO_WEBHOOK_SECRET=...
 
-# Application
 NEXT_PUBLIC_BASE_URL=http://localhost:3000
 ```
 
-4. **Configurar Base de Datos Turso**
+> En Vercel, configurar las mismas variables en Project Settings → Environment Variables. **Production** debe usar credenciales `APP_USR-...`; **Preview** debe usar `TEST-...` para evitar cargar dinero real al probar.
+
+## Comandos
 
 ```bash
-# Instalar Turso CLI
-curl -sSfL https://get.tur.so/install.sh | bash
+npm run dev              # dev server en :3000
+npm run build            # build de producción
+npm start                # servir build (requiere build previo)
+npm run lint             # ESLint
 
-# Login
-turso auth login
+# Drizzle
+npm run db:generate      # generar migraciones desde schema.ts
+npm run db:migrate       # aplicar a Turso
+npm run db:studio        # GUI Drizzle Studio en https://local.drizzle.studio
 
-# Crear base de datos
-turso db create rifas-db
-
-# Obtener URL y token
-turso db show rifas-db --url
-turso db tokens create rifas-db
+# Tests de concurrencia (requieren dev server corriendo)
+node run-concurrency-test.js
+node test-concurrency.js
+node simple-test.js
 ```
 
-5. **Ejecutar migraciones**
+## Estructura
 
-```bash
-npm run db:generate
-npm run db:migrate
+```
+.
+├── app/                          # Next.js 14 App Router
+│   ├── api/
+│   │   ├── numbers/              # estado de la grilla
+│   │   ├── purchase/             # ciclo de compra
+│   │   ├── payment/              # callbacks MP (UX only)
+│   │   ├── preference/           # creación de preference MP
+│   │   ├── webhooks/mercadopago/ # webhook IPN (verdad sobre el pago)
+│   │   ├── raffle/config/        # configuración dinámica de la rifa
+│   │   ├── cron/cleanup/         # liberación de reservas expiradas
+│   │   └── test/reset-numbers/   # solo-dev
+│   ├── layout.tsx
+│   └── page.tsx
+├── components/
+│   └── RifasApp.tsx              # componente raíz
+├── lib/
+│   ├── db/                       # schema Drizzle + cliente
+│   ├── services/raffleService.ts # lógica de negocio
+│   └── mercadopago.ts            # cliente MP + helpers
+├── drizzle.config.ts
+├── CLAUDE.md                     # guía operativa para Claude Code
+├── ESTADO.md                     # checklist de tareas + bitácora
+├── MEMORIA.md                    # contexto y decisiones
+├── BUGS.md                       # registro de bugs
+├── LEARNINGS.md                  # aprendizajes técnicos
+├── .claude/                      # hooks, commands, agents para Claude Code
+└── old_docs/                     # documentación histórica (rifa 2025)
 ```
 
-6. **Iniciar servidor de desarrollo**
+## Deploy en Vercel
 
 ```bash
-npm run dev
-```
-
-Abrir [http://localhost:3000](http://localhost:3000)
-
-## 🚀 Deployment en Vercel
-
-### Opción 1: Deploy con Vercel CLI
-
-```bash
+# Opción A: CLI
 npm i -g vercel
-vercel
+vercel              # preview
+vercel --prod       # producción
+
+# Opción B: GitHub auto-deploy
+# push a main → Vercel deploya automáticamente a producción
 ```
 
-### Opción 2: Deploy desde GitHub
+Antes del primer deploy:
 
-1. Ir a [Vercel Dashboard](https://vercel.com/dashboard)
-2. Click en "New Project"
-3. Importar repositorio de GitHub
-4. Configurar variables de entorno:
-   - `TURSO_DATABASE_URL`
-   - `TURSO_AUTH_TOKEN`
-   - `MERCADO_PAGO_ACCESS_TOKEN`
-   - `MERCADO_PAGO_PUBLIC_KEY`
-   - `MERCADO_PAGO_WEBHOOK_SECRET`
-   - `NEXT_PUBLIC_BASE_URL` (usar dominio de producción)
-5. Deploy
+1. Cargar las 5 variables de entorno en Vercel (ver sección anterior)
+2. Configurar el webhook MP apuntando a `https://<dominio>.vercel.app/api/webhooks/mercadopago`
+3. Verificar con `curl` o Vercel logs que el endpoint responde 200
 
-## 📝 Configuración de MercadoPago
+## Configuración de MercadoPago
 
-1. **Obtener credenciales**
-   - Ir a [MercadoPago Developers](https://www.mercadopago.com.ar/developers/panel)
-   - Crear aplicación
-   - Copiar Access Token y Public Key
+1. Ir a [MP Developers Panel](https://www.mercadopago.com.ar/developers/panel)
+2. Crear aplicación y copiar Access Token + Public Key
+3. En "Webhooks" configurar URL `https://<dominio>/api/webhooks/mercadopago`, evento `payment`
+4. Copiar el secret del webhook a `MERCADO_PAGO_WEBHOOK_SECRET`
+5. Para testing: crear credenciales de sandbox en la misma app
 
-2. **Configurar Webhooks**
-   - En el panel de MercadoPago, configurar webhook URL:
-   ```
-   https://tu-dominio.vercel.app/api/webhooks/mercadopago
-   ```
-   - Eventos a escuchar: `payment`
+Detalle paso a paso en `old_docs/TUTORIAL_MERCADOPAGO.md` y `old_docs/INTEGRACION_MERCADOPAGO.md` (referencia histórica de la rifa 2025).
 
-## 📁 Estructura del Proyecto
-
-```
-/
-├── app/                    # Next.js App Router
-│   ├── api/               # API Routes
-│   │   ├── numbers/       # Obtener números
-│   │   ├── purchase/      # Crear compra
-│   │   └── webhooks/      # MercadoPago webhooks
-│   ├── layout.tsx         # Layout principal
-│   └── page.tsx           # Página principal
-├── components/            # Componentes React
-│   └── RifasApp.tsx      # Componente principal
-├── lib/                   # Librerías y servicios
-│   ├── db/               # Configuración BD
-│   │   ├── schema.ts     # Esquema Drizzle
-│   │   └── index.ts      # Cliente Turso
-│   ├── services/         # Lógica de negocio
-│   └── mercadopago.ts    # Config MercadoPago
-└── public/               # Archivos estáticos
-```
-
-## 🔧 Scripts Disponibles
+## Anti-sobreventa: tests de concurrencia
 
 ```bash
-npm run dev          # Servidor de desarrollo
-npm run build        # Build de producción
-npm run start        # Iniciar servidor de producción
-npm run lint         # Linter
-npm run db:generate  # Generar migraciones
-npm run db:migrate   # Aplicar migraciones
-npm run db:studio    # Drizzle Studio (GUI para BD)
+# Terminal 1
+npm run dev
+
+# Terminal 2 (opcional, para inspección visual)
+npm run db:studio
+
+# Terminal 3
+node run-concurrency-test.js
 ```
 
-## 🎨 Personalización
+Cubre:
+- 2 usuarios compitiendo por el mismo número
+- 4 usuarios con números superpuestos (verifica que cada número se vende una sola vez)
 
-### Cambiar precio por número
-Editar en `components/RifasApp.tsx`:
-```typescript
-const PRICE_PER_NUMBER = 500; // Cambiar valor
-```
+Resultado esperado: cero conflictos, mensajes claros para los usuarios que pierden la carrera.
 
-### Cambiar cantidad de números
-Modificar en el esquema de BD y componente:
-- `lib/db/schema.ts`: `totalNumbers` default
-- `components/RifasApp.tsx`: Grid dimensions
+## Trabajando con Claude Code
 
-### Cambiar tiempo de reserva
-En `components/RifasApp.tsx`:
-```typescript
-const RESERVATION_TIMEOUT = 15 * 60; // segundos
-```
+Este repo tiene infraestructura de gestión madura en `.claude/` y archivos `CLAUDE.md`, `ESTADO.md`, `MEMORIA.md`, `BUGS.md`, `LEARNINGS.md`.
 
-## 🐛 Troubleshooting
+Comandos slash disponibles dentro de Claude Code:
 
-### Error de conexión a Turso
-- Verificar URL y token en `.env.local`
-- Verificar que la BD existe: `turso db list`
+- `/inicio` — sincroniza Git y carga contexto del proyecto
+- `/save` — actualiza ESTADO/BUGS/MEMORIA y commitea + pushea
+- `/autoaprendizaje` — captura aprendizajes en LEARNINGS.md y promueve reglas a CLAUDE.md
+- `/allow` — agrega herramientas usadas en la sesión a `settings.local.json`
+- `/test-concurrencia` — orquesta el test de concurrencia con dev server
+- `/deploy-vercel` — pipeline de deploy con verificaciones previas
 
-### MercadoPago no redirige
-- Verificar Access Token válido
-- Verificar URLs de retorno configuradas
+Agents disponibles vía `Task()`:
 
-### Build falla en Vercel
-- Verificar todas las variables de entorno
-- Revisar logs en Vercel Dashboard
+- `diagnosis-specialist` — análisis previo a cualquier cambio
+- `payment-flow-debugger` — issues con MP (preference/callback/webhook)
+- `concurrency-validator` — validación de cambios en `raffleService` o schema
+- `db-migration-reviewer` — revisión de migraciones Drizzle antes de aplicar
 
-## 📊 Panel de Administración
+## Troubleshooting
 
-Acceder desde la app principal:
-1. Click en botón "Admin" en header
-2. Ver métricas de ventas
-3. Lista de compras recientes
-4. Exportar datos (próximamente)
+| Problema | Posible causa | Solución |
+|----------|---------------|----------|
+| Grilla no actualiza tras compra | caché de Next sin `dynamic = 'force-dynamic'` | revisar API routes con headers `no-cache` |
+| Webhook MP rechaza notificaciones | firma HMAC inválida | revisar orden de campos en el manifest, ver `lib/mercadopago.ts` |
+| Build falla en Vercel | env vars faltantes | `vercel env ls` y agregar las que falten |
+| Compras quedan en `pending` | webhook no llega o falla silenciosamente | inspeccionar logs Vercel + `event_logs` en BD |
+| Números se quedan `reserved` | cron `/api/cron/cleanup` no se ejecuta | configurar Vercel Cron en `vercel.json` |
 
-## 🔒 Seguridad
+## Licencia
 
-- Variables de entorno nunca en el código
-- Webhooks con verificación de firma
-- Validación de datos con Zod
-- Transacciones atómicas en BD
-- Rate limiting en APIs (configurable)
-
-## 📧 Soporte
-
-Para problemas o consultas:
-- Abrir un [issue en GitHub](https://github.com/roddb/sistema-ventas-rifas/issues)
-- Email: soporte@colegio.edu.ar
-
-## 📄 Licencia
-
-MIT - Ver archivo LICENSE
-
----
-
-Desarrollado con ❤️ para el evento escolar 2024
+MIT — desarrollado para evento escolar.

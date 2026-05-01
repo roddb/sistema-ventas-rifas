@@ -1,0 +1,63 @@
+{
+  "_comment": "Hooks activos en Sistema de Ventas de Rifas (adaptados de Intellego Platform / PAIDEIA / Diseño_cuadernillos). Los permisos viven en settings.local.json (no versionado). Ver CLAUDE.md para el workflow.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/check-file-size.sh\"",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(git commit*)",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/pre-commit-gate.sh\"",
+            "timeout": 30,
+            "statusMessage": "Pre-commit gate (rifas)..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/stop-quality-gate.sh\"",
+            "timeout": 120,
+            "statusMessage": "Quality gate (lint + build)..."
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/post-compact-context.sh\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/problem-type-detector.js\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

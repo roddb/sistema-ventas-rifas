@@ -1177,7 +1177,7 @@ const RifasApp = () => {
           <div className="space-y-1 text-sm text-gray-600">
             <p><strong>ID:</strong> {currentPurchase.id}</p>
             <p><strong>Comprador:</strong> {currentPurchase.buyerName}</p>
-            <p><strong>Estudiante:</strong> {currentPurchase.studentName} - {currentPurchase.course} "{currentPurchase.division}"</p>
+            <p><strong>Estudiante:</strong> {currentPurchase.studentName} - {currentPurchase.course} &quot;{currentPurchase.division}&quot;</p>
             <p><strong>Números:</strong> {currentPurchase.numbers.join(', ')}</p>
             <p><strong>Total:</strong> ${currentPurchase.totalAmount.toLocaleString('es-AR')}</p>
             {currentPurchase.mercadoPagoPreferenceId && (
@@ -1214,7 +1214,7 @@ const RifasApp = () => {
             <p className="text-gray-700"><strong className="text-gray-800">ID:</strong> {currentPurchase.id}</p>
             <p className="text-gray-700"><strong className="text-gray-800">Comprador:</strong> {currentPurchase.buyerName}</p>
             <p className="text-gray-700"><strong className="text-gray-800">Estudiante:</strong> {currentPurchase.studentName}</p>
-            <p className="text-gray-700"><strong className="text-gray-800">Curso:</strong> {currentPurchase.course} "{currentPurchase.division}"</p>
+            <p className="text-gray-700"><strong className="text-gray-800">Curso:</strong> {currentPurchase.course} &quot;{currentPurchase.division}&quot;</p>
             <p className="text-gray-700"><strong className="text-gray-800">Números comprados:</strong> {currentPurchase.numbers.join(', ')}</p>
             <p className="text-gray-700"><strong className="text-gray-800">Total pagado:</strong> ${currentPurchase.totalAmount.toLocaleString('es-AR')}</p>
             <p className="text-gray-700"><strong className="text-gray-800">Método de pago:</strong> MercadoPago</p>
