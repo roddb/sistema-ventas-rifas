@@ -7,7 +7,20 @@
 #
 # Uso: ./scripts/deploy.sh
 #
+# Prerequisitos one-time (ver docs/superpowers/specs/2026-05-02-migracion-cloud-run-design.md):
+#   - APIs habilitadas en el proyecto: run, cloudbuild, artifactregistry, secretmanager
+#   - 4 secrets creados con nombres exactos: turso-auth-token, mp-access-token,
+#     mp-client-secret, mp-webhook-secret
+#   - Service account de Cloud Run (PROJECT_NUMBER-compute@developer.gserviceaccount.com)
+#     con role roles/secretmanager.secretAccessor sobre los 4 secrets
+#   - Repositorio Artifact Registry "app" en us-east1
+#
 set -euo pipefail
+
+# Anclar al directorio raíz del repo independientemente de desde dónde se invoque
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$REPO_ROOT"
 
 if [ ! -f .env.local ]; then
   echo "ERROR: .env.local no existe en $(pwd). Sin él no se pueden setear las env vars no-secretas."
@@ -30,6 +43,10 @@ for var in TURSO_DATABASE_URL MERCADO_PAGO_PUBLIC_KEY MERCADO_PAGO_CLIENT_ID NEX
     exit 1
   fi
 done
+
+# Pre-flight checks de gcloud
+command -v gcloud >/dev/null || { echo "ERROR: gcloud CLI no instalado. Instalalo: https://cloud.google.com/sdk/docs/install"; exit 1; }
+gcloud auth print-access-token >/dev/null 2>&1 || { echo "ERROR: gcloud no autenticado. Corré: gcloud auth login"; exit 1; }
 
 echo "🚀 Deploying $SERVICE a $PROJECT en $REGION..."
 
