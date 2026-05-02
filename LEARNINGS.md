@@ -36,6 +36,18 @@
 
 - **2025-09-26** Técnico — `nanoid` produce IDs de 21 caracteres por default; para `purchase.id` queda más legible y único de sobra. No bajar el tamaño para "ahorrar" — la colisión es teórica pero el debugging post-mortem se complica si dos compras quedan con IDs muy parecidos. _(Destino: solo registro)_ _(Origen: discusión durante la implementación)_
 
+### 2026-05-01 — Tarea 1.1 (npm audit + bump de seguridad)
+
+- **2026-05-01** Error evitable — `npm audit fix --force` en este repo bajaría `mercadopago` a `0.5.0` (downgrade catastrófico que rompe el flujo de pago). NUNCA correr `--force` sin revisar las advertencias de "breaking change" línea por línea. La salida del audit muestra explícitamente qué paquete bajaría a qué versión: leerla. _(Destino: solo registro)_ _(Origen: tarea 1.1 reactivación 2026)_
+
+- **2026-05-01** Técnico — Las dependencias con caret (`^x.y.z`) en `package.json` permiten drift silencioso al correr `npm install` sin lockfile sincronizado. En este repo el lockfile original era de septiembre/2025 pero al instalar deps en mayo/2026 npm resolvió `mercadopago` a 2.9.0, `nodemailer` a 6.10.1 y `@types/nodemailer` a 6.4.19 (fueron especificadas como ^2.0.15, ^6.9.14, ^6.4.15). Para librerías sensibles (pago, runtime) preferir versión exacta sin caret. _(Destino: solo registro)_ _(Origen: tarea 1.1)_
+
+- **2026-05-01** Técnico — El paquete `@types/nodemailer@6.4.19` arrastra `@aws-sdk/client-ses` como **runtime dep real** (no peer ni dev), inyectando ~78 paquetes y 18 vulnerabilidades transitivas a un proyecto que no usa SES. Versiones previas (6.4.15) no tienen ese arrastre. Reproducir esta clase de issue en otros proyectos: `npm ls <paquete-de-types>` para ver si trae runtime deps. _(Destino: solo registro)_ _(Origen: tarea 1.1)_
+
+- **2026-05-01** Técnico — Las advisories de Next.js para `auth bypass`, `cache poisoning` y `SSRF` (GHSA-7gfc-8cq8-jh5f, GHSA-gp8f-8m3g-qvj9, GHSA-4342-x723-ch2f) tienen patches en la línea 14.2.x sin breaking changes (14.2.5 → 14.2.35). Antes de plantear un major bump (Next 15/16), confirmar siempre el changelog de la línea minor — la mayoría de los CVEs de Next 14 ya están parcheados en 14.2.35. _(Destino: solo registro)_ _(Origen: tarea 1.1)_
+
+- **2026-05-01** Técnico — La advisory de drizzle-orm `<0.45.2` (GHSA-gpj5-g38j-94v9, SQL injection vía dynamic identifiers) NO se activa con uso normal del query builder (`eq`, `and`, `where`, etc.) ni con `` sql`CONSTANTE` `` sin interpolación. Solo es explotable si el código pasa input del usuario a `sql.identifier()`, `sql.raw()` o template strings con interpolación dinámica. Antes de planear un major bump, hacer `grep -rn "sql\\.identifier\\|sql\\.raw\\|sql\\\`.*\\${" lib/ app/` y verificar que no hay matches relevantes. _(Destino: solo registro)_ _(Origen: tarea 1.1)_
+
 ### 2026-05-01 — Sesión de reactivación + modernización
 
 - **2026-05-01** Convención técnica — La gestión de proyecto madura en este repo sigue el patrón gold standard de Intellego Platform / Diseño_cuadernillos / Auditoría PAIDEIA: 5 .md raíz (CLAUDE, ESTADO, MEMORIA, BUGS, LEARNINGS) + `.claude/{settings.json, hooks/, commands/, agents/}`. Los archivos antiguos quedan en `old_docs/` como referencia histórica, no se editan. _(Destino: CLAUDE.md)_ _(Origen: modernización 2026-05)_

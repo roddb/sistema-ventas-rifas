@@ -39,6 +39,12 @@ while IFS= read -r file; do
     if [[ "$file" == .claude/commands/* ]] || [[ "$file" == .claude/agents/* ]]; then
       continue
     fi
+    # docs/ contiene specs, plans, reports y otra documentación técnica que
+    # legitimamente incluye comandos shell con "\n" (curl -w "...%{http_code}\n",
+    # printf, etc.) como ejemplos ejecutables.
+    if [[ "$file" == docs/* ]]; then
+      continue
+    fi
     if grep -l '\\n' "$file" 2>/dev/null | head -1 > /dev/null; then
       MATCHES=$(grep -c '\\n' "$file" 2>/dev/null || echo 0)
       ERRORS="${ERRORS}

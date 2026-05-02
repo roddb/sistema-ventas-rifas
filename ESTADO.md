@@ -29,7 +29,7 @@
 - [x] 0.10 Primer commit consolidando reactivación 2026 (gestión + lint config + PII gitignore) - DEV
 
 ### Fase 1: Reactivación técnica
-- [ ] 1.1 Revisar `package.json` y actualizar deps con vulnerabilidades críticas (npm audit) - DEV
+- [x] 1.1 Revisar `package.json` y actualizar deps con vulnerabilidades críticas (npm audit) - DEV
 - [ ] 1.2 Verificar credenciales MercadoPago vigentes (token PROD puede haber expirado) - TEST
 - [ ] 1.3 Verificar conexión a Turso (auth token vigente) - TEST
 - [ ] 1.4 Verificar deploy en Vercel — variables de entorno presentes y vigentes - TEST
@@ -62,6 +62,20 @@
 ---
 
 ## Bitácora
+
+### 2026-05-01 — Tarea 1.1 completada (npm audit + bump de seguridad)
+- **Resumen**: Auditoría de dependencias tras 8 meses de pausa. Reducción de 40 → 13 vulnerabilidades, 0 críticas restantes. Resto aceptado con justificación documentada.
+- **Tareas completadas**: 1.1
+- **Acciones**:
+  - `@types/nodemailer` pinned a `6.4.15` exact (era `^6.4.15`, había drift a 6.4.19 que arrastraba `@aws-sdk/client-ses` real con 18 vulns transitivas; el paquete de tipos no debería traer runtime deps)
+  - `next` 14.2.5 → 14.2.35 (patch dentro de la 14.2 line — no breaking; fix de 17 advisories incluyendo 2 critical: auth bypass + cache poisoning + SSRF)
+  - `eslint-config-next` 14.2.5 → 14.2.35 (sincroniza)
+  - Verificada explotabilidad de drizzle-orm SQL injection (GHSA-gpj5-g38j-94v9): NO explotable — el código no usa `sql.identifier()`, `sql.raw()` ni interpolación dinámica de identifiers
+- **Vulns residuales aceptadas (13)**: Next residuales (sin fix en 14.2.x), drizzle-orm <0.45.2 (no explotable), nodemailer <8.0.4 (sin uso runtime, fixear en Fase 3.2), glob/minimatch/esbuild/postcss (dev-only o transitive sin superficie), uuid en mercadopago (afecta v3/v5/v6 con buf, MP usa v4 sin buf)
+- **Validación**: `npm run lint` ✓ (3 warnings preexistentes), `npm run build` ✓ (7 rutas API + página)
+- **NO ejecutado**: `npm audit fix --force` — habría bajado mercadopago a 0.5.0 (catastrófico para flujo de pago)
+- **Próxima tarea**: 1.2 — Verificar credenciales MercadoPago vigentes (token PROD puede haber expirado)
+- **Archivos modificados**: `package.json`, `package-lock.json`, `ESTADO.md`, `LEARNINGS.md`
 
 ### 2026-05-01 — Save #1 (verificación técnica + cierre de Fase 0)
 - **Resumen**: Cierre de Fase 0. Se verificó que `npm run lint` y `npm run build` pasan tras 8 meses de inactividad. En el proceso se detectaron y corrigieron tres issues de scaffolding/seguridad.
@@ -110,4 +124,4 @@
 
 ## Próxima tarea
 
-**1.1** — Revisar `package.json` y correr `npm audit` para detectar vulnerabilidades críticas tras 8 meses sin updates de dependencias.
+**1.2** — Verificar credenciales MercadoPago vigentes: el access token PROD puede haber expirado tras 8 meses de inactividad. Confirmar también que las env vars en Vercel (Production y Preview) siguen presentes y válidas.
