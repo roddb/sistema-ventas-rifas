@@ -3,10 +3,10 @@
 ## Información
 - **Proyecto**: Sistema de Ventas de Rifas Escolares
 - **Repositorio**: https://github.com/roddb/sistema-ventas-rifas
-- **Producción**: https://sistema-ventas-rifas.vercel.app
+- **Producción**: https://sistema-ventas-rifas-kc5dasqukq-ue.a.run.app (Cloud Run, us-east1)
 - **Última edición productiva**: Septiembre–Octubre 2025 (rifa escolar 2025)
 - **Estado actual**: Reactivación 2026 — proyecto dado de baja al cerrar la rifa anterior, vuelve a levantarse para nueva edición
-- **Última sesión**: 2026-05-01 — gestión modernizada + verificación técnica post-pausa (lint+build verdes, eslintrc creado, PII ignorada)
+- **Última sesión**: 2026-05-02 — migración Vercel → Cloud Run completada (proyecto sistema-ventas-rifas-prod, us-east1, 100% Free Tier)
 - **Versiones previas de la documentación**: `old_docs/` (CLAUDE.md viejo, README, Historial, INTEGRACION_MERCADOPAGO, TUTORIAL_MERCADOPAGO, TEST_CONCURRENCIA)
 
 ---
