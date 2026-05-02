@@ -13,7 +13,8 @@ docs/
 .DS_Store
 *.log
 *.csv
+coverage/
+*.tsbuildinfo
 test-*.js
 run-*.js
 simple-*.js
-.next.test
