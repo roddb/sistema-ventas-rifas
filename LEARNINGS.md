@@ -36,6 +36,18 @@
 
 - **2025-09-26** Técnico — `nanoid` produce IDs de 21 caracteres por default; para `purchase.id` queda más legible y único de sobra. No bajar el tamaño para "ahorrar" — la colisión es teórica pero el debugging post-mortem se complica si dos compras quedan con IDs muy parecidos. _(Destino: solo registro)_ _(Origen: discusión durante la implementación)_
 
+### 2026-05-02 — Migración Vercel → Cloud Run
+
+- **2026-05-02** Convención técnica — Vercel Hobby Tier auto-pausa workspaces que detecta como "uso comercial" (apps con e-commerce/payments). El estado pausado es **terminal**: no hay botón "Resume" en la UI; solo "Upgrade to Pro $20/mes". El proyecto puede ser eliminado en el proceso. Para apps que mueven dinero, NO confiar en Vercel Hobby como hosting productivo. _(Destino: solo registro)_ _(Origen: BUG-007)_
+
+- **2026-05-02** Técnico — Cloud Run free tier mensual: 2M requests, 360K GB-seconds, 180K vCPU-seconds. Para una app con tráfico bajo (rifa local, cientos de visitas/día), el free tier cubre con holgura. Restricción operativa: `--min-instances=0` (escala a cero) para no incurrir en costos por instancias warm; cold start ~4.2s aceptable porque MP webhook tiene retry policy de 3 intentos en ~22 min. _(Destino: solo registro)_ _(Origen: setup migración)_
+
+- **2026-05-02** Convención técnica — Latencia Turso desde Cloud Run depende fuertemente de la región. Turso primary está en AWS us-east-1 (IP 52.71.235.0). Cloud Run en us-east1 → Turso ~5-10ms. southamerica-east1 → Turso ~150ms. Para apps con transacciones anti-sobreventa críticas, priorizar latencia con la BD por sobre latencia con el usuario. _(Destino: solo registro)_ _(Origen: brainstorming migración)_
+
+- **2026-05-02** Herramienta — `@libsql/client@0.8.1` trae binario nativo `linux-x64-musl` que falla en Alpine 3.21 con `Error relocating .../index.node: fcntl64: symbol not found`. Usar `node:20-slim` (Debian glibc) en lugar de `node:20-alpine`. La imagen final pesa ~180 MB (vs ~150 MB Alpine), aceptable dentro del cap de Artifact Registry free tier. Si en el futuro se quiere volver a Alpine, hay que esperar a que libsql publique binarios musl compatibles con Alpine 3.21+. _(Destino: solo registro)_ _(Origen: Task 6 migración)_
+
+- **2026-05-02** Técnico — `gcloud run deploy --source=.` por default crea/usa el repo `cloud-run-source-deploy` en Artifact Registry, NO un repo custom aunque exista. Para que aplique la cleanup policy de retención de imágenes, configurarla sobre `cloud-run-source-deploy` directamente. Crear repo custom y esperar que `--source` lo use es perder tiempo. _(Destino: solo registro)_ _(Origen: Task 6 fix)_
+
 ### 2026-05-01 — Tarea 1.1 (npm audit + bump de seguridad)
 
 - **2026-05-01** Error evitable — `npm audit fix --force` en este repo bajaría `mercadopago` a `0.5.0` (downgrade catastrófico que rompe el flujo de pago). NUNCA correr `--force` sin revisar las advertencias de "breaking change" línea por línea. La salida del audit muestra explícitamente qué paquete bajaría a qué versión: leerla. _(Destino: solo registro)_ _(Origen: tarea 1.1 reactivación 2026)_

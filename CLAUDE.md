@@ -6,10 +6,10 @@ Guía operativa para Claude Code al trabajar en este repo.
 
 Sistema web para venta de rifas escolares con grilla interactiva (2.000 números), reservas temporales con timeout, integración real con MercadoPago Checkout Pro y BD edge en Turso. Usado en producción en evento escolar 2025; reactivado en 2026 para nueva edición.
 
-- Producción: https://sistema-ventas-rifas.vercel.app
+- Producción: https://sistema-ventas-rifas-kc5dasqukq-ue.a.run.app (Cloud Run, us-east1, proyecto sistema-ventas-rifas-prod)
 - Repositorio: https://github.com/roddb/sistema-ventas-rifas
 - Operación: ventas reales con dinero real → cero tolerancia a sobreventa o doble cobro
-- Auto-deploy on push to main vía GitHub → Vercel pipeline
+- Deploy manual a Google Cloud Run (us-east1) vía ./scripts/deploy.sh — sin auto-deploy
 
 ## Tech Stack
 
@@ -23,7 +23,9 @@ Sistema web para venta de rifas escolares con grilla interactiva (2.000 números
 - Email: Nodemailer 6.9.14 (post-purchase)
 - Styling: Tailwind CSS 3.4.7 + lucide-react icons
 - IDs: nanoid 5.1.5
-- Hosting: Vercel (preview + production)
+- Hosting: Google Cloud Run (us-east1, proyecto sistema-ventas-rifas-prod, account intellego.ok@gmail.com)
+- Container: Docker multi-stage Node 20 slim (Debian), imagen ~180 MB en Artifact Registry
+- Secrets: Google Secret Manager (4 secrets críticos), env vars planas para los 4 valores públicos
 - Package Manager: npm (NOT pnpm o yarn)
 
 ## Project Structure
@@ -69,10 +71,16 @@ node run-concurrency-test.js # test orquestado (2 escenarios)
 node test-concurrency.js     # test detallado (4 usuarios, 6 números)
 node simple-test.js          # test simple
 
-# Deploy
-vercel                       # deploy preview
-vercel --prod                # deploy a producción
-vercel env pull              # sincronizar env vars locales
+# Deploy (Cloud Run)
+./scripts/deploy.sh                                  # build + deploy a producción
+gcloud run services describe sistema-ventas-rifas \
+  --region=us-east1 --project=sistema-ventas-rifas-prod  # estado actual
+gcloud run services logs read sistema-ventas-rifas \
+  --region=us-east1 --project=sistema-ventas-rifas-prod --limit=50  # logs
+
+# Secret Manager
+gcloud secrets versions add <SECRET_NAME> --data-file=- --project=sistema-ventas-rifas-prod  # rotar secret
+gcloud secrets list --project=sistema-ventas-rifas-prod                                       # listar
 
 # Session Management (Claude Code)
 claude --continue            # retomar última sesión
@@ -140,6 +148,9 @@ claude --resume              # elegir sesión específica
 - ❌ NUNCA pushear cambios al flujo de pago durante horario de venta activa
 - ❌ NUNCA hacer commit con `\n` literal en .md (regresión BUG-005 de PAIDEIA — se chequea en pre-commit-gate)
 - ❌ NUNCA cerrar sesión sin actualizar ESTADO.md vía /save
+- ❌ NUNCA correr `gcloud projects delete sistema-ventas-rifas-prod` ni `gcloud run services delete sistema-ventas-rifas` durante venta activa
+- ❌ NUNCA editar valores en Secret Manager directamente desde Console UI; usar `gcloud secrets versions add` y forzar redeploy
+- ❌ NUNCA commitear `scripts/deploy.sh` con valores hardcodeados; siempre leer de `.env.local`
 
 </critical_notes>
 
@@ -148,7 +159,7 @@ claude --resume              # elegir sesión específica
 | MCP | Propósito | Reemplaza |
 |-----|-----------|-----------|
 | **turso-cloud** | Queries a Turso (read-only para diagnóstico, write con cuidado) | curl, libsql CLI |
-| **vercel** | Deploys, logs, env vars, build inspection | dashboard Vercel, curl |
+| **gcloud** | Deploy, logs, secret management, billing | dashboard GCP |
 | **context7** | Docs de Next.js, Drizzle, MercadoPago SDK | búsquedas en Google/SO |
 | **github** | PRs, issues, code search | gh CLI, web UI |
 

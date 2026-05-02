@@ -7,9 +7,9 @@
 ---
 
 ## Resumen
-- **Total bugs registrados**: 6 (5 históricos + 1 detectado en reactivación)
-- **Resueltos**: 6
-- **Pendientes**: 0
+- **Total bugs registrados**: 8
+- **Resueltos**: 7
+- **Pendientes**: 1
 
 > Histórico migrado desde `old_docs/Historial.md` (sesión inaugural 2025-09-11). A partir de la reactivación 2026-05-01, los nuevos bugs se numeran BUG-006+.
 
@@ -90,6 +90,33 @@
 - **Solución aplicada**: Agregado al `.gitignore` el patrón `*.csv` y entrada explícita para `numeros_disponibles_venta.txt` antes de cualquier commit. `git status` confirma que ya no aparecen.
 - **Archivos afectados**: `.gitignore`
 - **Fecha resuelto**: 2026-05-01
+
+---
+
+### BUG-007 | RESUELTO
+- **Fecha detectado**: 2026-05-01
+- **Descripción**: Workspace de Vercel `rodrigodibernardo-gmailcoms-projects` quedó en estado `Paused`; el proyecto `sistema-ventas-rifas` fue eliminado del workspace. La URL pública `sistema-ventas-rifas.vercel.app` devolvió HTTP 404 con `x-vercel-error: DEPLOYMENT_NOT_FOUND`.
+- **Contexto**: Sesión de reactivación 2026-05-01, intento de verificar deploy productivo (tarea 1.4).
+- **Error/Síntoma**: Sitio caído. Dashboard Vercel muestra badge "Paused" en el workspace, "Upgrade to resume service" como única acción ofrecida. No hay botón "Resume" / "Unpause".
+- **Causa raíz**: Hipótesis dominante — detección automática de uso comercial. Vercel endureció en 2024-2026 la cláusula "no commercial use" del plan Hobby; una rifa con MercadoPago integrado y operación 2025 con $4M ARS proyectados encajó en el flag. Caps de uso descartados; sin invoices pendientes; Speed Insights activado en Hobby (que requiere Pro) probablemente fue disparador secundario.
+- **Solución aplicada**: Migración completa a Google Cloud Run en us-east1 bajo cuenta `intellego.ok@gmail.com` (proyecto nuevo `sistema-ventas-rifas-prod`). Mantiene 100% Free Tier. Documentado en `docs/superpowers/specs/2026-05-02-migracion-cloud-run-design.md`.
+- **Archivos afectados**: `next.config.js`, nuevos `Dockerfile`, `.dockerignore`, `scripts/deploy.sh`, `public/.gitkeep`. Renombrado `.claude/commands/deploy-vercel.md` → `.claude/commands/deploy.md`.
+- **Fecha resuelto**: 2026-05-02
+
+---
+
+### BUG-008 | PENDIENTE
+- **Fecha detectado**: 2026-05-02 (durante cutover MP de migración Cloud Run, Task 9)
+- **Descripción**: El handler `app/api/webhooks/mercadopago/route.ts` línea ~64 tiene comentado el `return NextResponse.json({error:'Invalid signature'}, {status:401})`. Cuando la firma HMAC del webhook no valida, el handler **logea "Invalid webhook signature"** pero **igualmente procesa el body con HTTP 200**.
+- **Contexto**: Detectado al ejecutar "Simular notificación" desde MP dashboard contra el nuevo endpoint en Cloud Run. La simulación retornó 200 y los logs mostraron `Invalid webhook signature` seguido por procesamiento normal del payload (intentó fetch del payment, falló con "not found" porque el ID era falso).
+- **Severidad**: ALTA. Cualquier atacante puede mandar POST forjado a `/api/webhooks/mercadopago` y el handler lo aceptará. La única defensa hoy es el fetch posterior a la API real de MP, pero si el atacante usa un ID válido (ej. de transacción real con otro merchant), podría manipular `purchases.status`.
+- **Causa raíz**: Código preexistente desde 2025. Alguien comentó el return 401 para debugging y nunca lo restauró. La migración a Cloud Run NO introdujo el bug, solo lo expuso al revisar logs durante el cutover.
+- **Fix obligatorio antes de Fase 4 (lanzamiento)**:
+  1. Descomentar el return 401 en `app/api/webhooks/mercadopago/route.ts`.
+  2. Verificar que `MERCADO_PAGO_WEBHOOK_SECRET` en Secret Manager coincide con el secret en el dashboard de MP (puede haberse regenerado durante el cutover).
+  3. Re-correr "Simular notificación" — debe devolver 401 si firma inválida, 200 si válida.
+- **Archivos afectados**: `app/api/webhooks/mercadopago/route.ts` línea ~62-66.
+- **Fecha resuelto**: PENDIENTE
 
 ---
 

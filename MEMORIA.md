@@ -86,6 +86,7 @@ El estado funcional al cierre de octubre 2025 era: producción estable, integrac
 - **Panel admin sin autenticación**: actualmente está oculto en UI pero la URL es accesible. Pendiente Fase 3.1 antes del próximo lanzamiento.
 - **Email post-compra**: Nodemailer está instalado pero no integrado. Pendiente Fase 3.2.
 - **Modo demo / simulación**: ya fue removido en sesión 2025-09-11; cualquier botón de "simular pago" que aparezca es regresión.
+- **Hosting**: Cloud Run en us-east1 (proyecto sistema-ventas-rifas-prod, account intellego.ok@gmail.com). 100% Free Tier.
 - Proyecto gestionado con `/inicio` y `/save`. Aprendizajes con `/autoaprendizaje`.
 
 ## Histórico de la rifa 2025 (referencia)
@@ -100,6 +101,26 @@ Rifa cerrada en octubre 2025. Datos resumidos:
 ---
 
 ## Historial de Sesiones
+
+### Sesión 2 — 2026-05-02 (migración Vercel → Cloud Run)
+- **Duración aproximada**: ~3h
+- **Resumen**: Diagnóstico del pause de Vercel + decisión de migración + ejecución completa.
+- **Logros**:
+  - Diagnóstico Vercel: workspace pausado (hipótesis: detección automática de uso comercial), proyecto `sistema-ventas-rifas` eliminado, sin invoice impaga, caps de uso todos OK
+  - Brainstorming con 7 decisiones documentadas en `docs/superpowers/specs/2026-05-02-migracion-cloud-run-design.md`
+  - Plan de implementación en `docs/superpowers/plans/2026-05-02-migracion-cloud-run.md`
+  - Containerización: Dockerfile multi-stage Node 20 slim (Debian) + `.dockerignore` + `output: 'standalone'` en next.config.js. Cambio Alpine → Debian forzado por incompat de @libsql/client con musl.
+  - Setup GCP: proyecto `sistema-ventas-rifas-prod` (project number 63979708570), billing asociado, 4 APIs habilitadas (run/cloudbuild/artifactregistry/secretmanager), repos Artifact Registry `app` (vacío) y `cloud-run-source-deploy` (en uso) con cleanup policies
+  - Secret Manager: 4 secrets (turso-auth-token, mp-access-token, mp-client-secret, mp-webhook-secret) con permiso secretAccessor al SA de Cloud Run
+  - Deploy en us-east1: revision `sistema-ventas-rifas-00002-8zs`, min 0 / max 10, 512Mi / 1 vCPU, allow-unauthenticated
+  - URL productiva: https://sistema-ventas-rifas-kc5dasqukq-ue.a.run.app
+  - Smoke tests pasados: HTTP 200 (250ms), /api/raffle/config conecta a Turso (1500 números a $1000), /api/numbers/verify responde, logs limpios, cold start 4.2s
+  - Webhook MP migrado: simulación devolvió 200
+- **Problemas encontrados**:
+  - BUG-007: Vercel auto-pause (resuelto vía migración)
+  - BUG-008: handler webhook acepta firmas inválidas (preexistente; pendiente fix antes de Fase 4)
+  - Issue operativo: @libsql/client requiere glibc, no musl — Dockerfile cambió a Debian slim
+- **Estado al cerrar**: Servicio Cloud Run productivo. Costo acumulado GCP: $0. Próxima tarea: 1.5 (smoke test del flujo completo en sandbox MP) o priorizar fix de BUG-008.
 
 ### Sesión 1 — 2026-05-01 (verificación técnica post-pausa)
 - **Duración aproximada**: ~30 min

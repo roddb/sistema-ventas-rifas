@@ -32,7 +32,7 @@
 - [x] 1.1 Revisar `package.json` y actualizar deps con vulnerabilidades críticas (npm audit) - DEV
 - [ ] 1.2 Verificar credenciales MercadoPago vigentes (token PROD puede haber expirado) - TEST
 - [ ] 1.3 Verificar conexión a Turso (auth token vigente) - TEST
-- [ ] 1.4 Verificar deploy en Vercel — variables de entorno presentes y vigentes - TEST
+- [x] 1.4 Verificar deploy en Vercel — variables de entorno presentes y vigentes - TEST
 - [ ] 1.5 `npm run dev` local + smoke test del flujo completo en sandbox - TEST
 - [ ] 1.6 Re-ejecutar `node run-concurrency-test.js` para validar que la lógica anti-sobreventa sigue intacta - TEST
 
@@ -62,6 +62,21 @@
 ---
 
 ## Bitácora
+
+### 2026-05-02 — Migración Vercel → Cloud Run completada
+- **Resumen**: Cuenta Vercel del usuario quedó pausada por flag de uso comercial; proyecto eliminado por la pausa. Migración completa a Google Cloud Run (us-east1) bajo cuenta intellego.ok@gmail.com.
+- **Tareas completadas**: 1.4
+- **Acciones**:
+  - Spec: `docs/superpowers/specs/2026-05-02-migracion-cloud-run-design.md`
+  - Plan: `docs/superpowers/plans/2026-05-02-migracion-cloud-run.md`
+  - Repo: `Dockerfile`, `.dockerignore`, `scripts/deploy.sh`, `public/.gitkeep` nuevos; `next.config.js` con `output: 'standalone'`
+  - GCP: proyecto `sistema-ventas-rifas-prod` (project number 63979708570) con billing, 4 APIs habilitadas, 2 repos Artifact Registry con cleanup policy, 4 secrets en Secret Manager, Cloud Run service `sistema-ventas-rifas` en us-east1
+  - URL pública: https://sistema-ventas-rifas-kc5dasqukq-ue.a.run.app
+  - Smoke tests OK: HTTP 200 (250ms), /api/raffle/config conecta a Turso, logs sin errores
+  - Webhook MP actualizado a la nueva URL, simulación devolvió 200
+- **Bugs detectados**: BUG-008 (handler webhook acepta firmas inválidas — preexistente)
+- **Próxima tarea**: 1.5 — `npm run dev` local + smoke test del flujo completo en sandbox MP. Considerar priorizar fix de BUG-008 antes de Fase 4.
+- **Archivos modificados**: ver Plan + meta-docs (CLAUDE/MEMORIA/ESTADO/BUGS/LEARNINGS) + `.claude/commands/deploy.md`
 
 ### 2026-05-01 — Tarea 1.1 completada (npm audit + bump de seguridad)
 - **Resumen**: Auditoría de dependencias tras 8 meses de pausa. Reducción de 40 → 13 vulnerabilidades, 0 críticas restantes. Resto aceptado con justificación documentada.
@@ -124,4 +139,4 @@
 
 ## Próxima tarea
 
-**1.2** — Verificar credenciales MercadoPago vigentes: el access token PROD puede haber expirado tras 8 meses de inactividad. Confirmar también que las env vars en Vercel (Production y Preview) siguen presentes y válidas.
+**1.5** — `npm run dev` local + smoke test del flujo completo en sandbox MP, validando que la integración Cloud Run + Turso + MP no tiene regresiones. Considerar priorizar fix de BUG-008 (return 401 comentado en webhook handler) antes de Fase 4.
