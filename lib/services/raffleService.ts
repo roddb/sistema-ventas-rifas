@@ -344,6 +344,10 @@ export class RaffleService {
   }
 
   // Confirmar pago y marcar números como vendidos
+  // Confirmar pago y marcar números como vendidos.
+  // Idempotente: si la compra ya fue confirmada antes, no re-ejecuta updates.
+  // Atómico: lock optimista en purchases.paymentStatus='pending' + verificación
+  // de números reservados, todo dentro de una transacción.
   static async confirmPayment(purchaseId: string, paymentData: {
     mercadoPagoPaymentId?: string;
     paymentMethod?: string;
@@ -351,36 +355,76 @@ export class RaffleService {
     if (!this.isDbAvailable()) {
       return true;
     }
-    
-    // Actualizar estado de la compra
-    await db
-      .update(purchases)
-      .set({
-        paymentStatus: 'approved',
-        mercadoPagoPaymentId: paymentData.mercadoPagoPaymentId,
-        paymentMethod: paymentData.paymentMethod,
-        updatedAt: new Date()
-      })
-      .where(eq(purchases.id, purchaseId));
-    
-    // Marcar números como vendidos
-    await db
-      .update(raffleNumbers)
-      .set({
-        status: 'sold',
-        soldAt: new Date(),
-        updatedAt: new Date()
-      })
-      .where(eq(raffleNumbers.purchaseId, purchaseId));
-    
-    // Log del evento
-    await db.insert(eventLogs).values({
-      eventType: 'PAYMENT_CONFIRMED',
-      purchaseId,
-      data: JSON.stringify(paymentData)
+
+    return await db.transaction(async (tx: any) => {
+      // Idempotencia: chequear si ya fue confirmado.
+      const [existing] = await tx
+        .select({ paymentStatus: purchases.paymentStatus })
+        .from(purchases)
+        .where(eq(purchases.id, purchaseId))
+        .limit(1);
+
+      if (!existing) {
+        console.error(`confirmPayment: purchase ${purchaseId} not found`);
+        throw new Error(`Purchase ${purchaseId} not found`);
+      }
+
+      if (existing.paymentStatus === 'approved') {
+        console.log(`confirmPayment: purchase ${purchaseId} already approved, skipping (idempotent retry)`);
+        return true;
+      }
+
+      // Lock optimista: solo actualiza si sigue en estado 'pending'.
+      // Si concurrentemente un cleanup la marcó como 'cancelled', este UPDATE
+      // afecta 0 filas y abortamos.
+      const purchaseUpdate = await tx
+        .update(purchases)
+        .set({
+          paymentStatus: 'approved',
+          mercadoPagoPaymentId: paymentData.mercadoPagoPaymentId,
+          paymentMethod: paymentData.paymentMethod,
+          updatedAt: new Date()
+        })
+        .where(and(
+          eq(purchases.id, purchaseId),
+          eq(purchases.paymentStatus, 'pending')
+        ))
+        .returning({ id: purchases.id });
+
+      if (purchaseUpdate.length === 0) {
+        console.error(`confirmPayment: purchase ${purchaseId} no longer pending (race with cleanup?). Aborting.`);
+        throw new Error(`Purchase ${purchaseId} state changed concurrently`);
+      }
+
+      // Lock optimista en raffleNumbers: solo actualiza filas que siguen reservadas.
+      // Si concurrentemente un cleanup las liberó, afecta 0 filas y revierte.
+      const numbersUpdate = await tx
+        .update(raffleNumbers)
+        .set({
+          status: 'sold',
+          soldAt: new Date(),
+          updatedAt: new Date()
+        })
+        .where(and(
+          eq(raffleNumbers.purchaseId, purchaseId),
+          eq(raffleNumbers.status, 'reserved')
+        ))
+        .returning({ id: raffleNumbers.id });
+
+      if (numbersUpdate.length === 0) {
+        console.error(`confirmPayment: no reserved numbers for purchase ${purchaseId}. Cleanup may have released them.`);
+        throw new Error(`No reserved numbers found for purchase ${purchaseId}`);
+      }
+
+      // Log del evento (solo en confirmación nueva, no en retries de purchase ya approved)
+      await tx.insert(eventLogs).values({
+        eventType: 'PAYMENT_CONFIRMED',
+        purchaseId,
+        data: JSON.stringify({ ...paymentData, numbersConfirmed: numbersUpdate.length })
+      });
+
+      return true;
     });
-    
-    return true;
   }
 
   // Cancelar pago y liberar números reservados
@@ -445,7 +489,9 @@ export class RaffleService {
       
       // Cancelar cada purchase expirada
       for (const purchase of expiredPurchases) {
-        // Liberar números asociados
+        // Liberar números asociados.
+        // Guard: solo liberar si siguen 'reserved'. Si un webhook concurrente ya los
+        // marcó como 'sold', NO los pisamos (race condition fix).
         const result = await db
           .update(raffleNumbers)
           .set({
@@ -455,16 +501,24 @@ export class RaffleService {
             soldAt: null,
             updatedAt: new Date()
           })
-          .where(eq(raffleNumbers.purchaseId, purchase.id));
-        
-        // Actualizar estado de la compra
+          .where(and(
+            eq(raffleNumbers.purchaseId, purchase.id),
+            eq(raffleNumbers.status, 'reserved')
+          ));
+
+        // Actualizar estado de la compra.
+        // Guard: solo cancelar si sigue 'pending'. Si un webhook concurrente ya la
+        // marcó como 'approved', NO la pisamos (race condition fix).
         await db
           .update(purchases)
           .set({
             paymentStatus: 'cancelled',
             updatedAt: new Date()
           })
-          .where(eq(purchases.id, purchase.id));
+          .where(and(
+            eq(purchases.id, purchase.id),
+            eq(purchases.paymentStatus, 'pending')
+          ));
         
         // Log del evento
         await db.insert(eventLogs).values({
