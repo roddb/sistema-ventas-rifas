@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
   try {
     switch (type) {
       case 'payment':
-        await handlePaymentNotification(data.id, action);
+        await handlePaymentNotification(dataId, action);
         break;
 
       case 'merchant_order':
@@ -96,7 +96,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         error: 'Transient processing error',
-        message: error instanceof Error ? error.message : 'Unknown error',
       },
       { status: 503 }
     );
