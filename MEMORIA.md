@@ -116,6 +116,7 @@ Rifa cerrada en octubre 2025. Datos resumidos:
   - URL productiva: https://sistema-ventas-rifas-kc5dasqukq-ue.a.run.app
   - Smoke tests pasados: HTTP 200 (250ms), /api/raffle/config conecta a Turso (1500 números a $1000), /api/numbers/verify responde, logs limpios, cold start 4.2s
   - Webhook MP migrado: simulación devolvió 200
+  - Fix BUG-008 completo: bug "webhook acepta firmas inválidas" expandido a 7 sub-bugs encadenados (008 base + 008-A a 008-G). Plan ejecutado en 6 commits + validación E2E. El sub-bug 008-G (ts en ms, no segundos) salió solo en validación con simulación dashboard MP — debug logs temporales revelaron `ts header: 1777861637614` (13 dígitos = ms). Fix completo: módulo `lib/webhook-verification.ts` con manifest oficial + parseo robusto + normalización ms→sec, handler con bypasses cerrados, idempotencia y locks optimistas en confirmPayment/cancelPayment/releaseExpiredReservations.
 - **Problemas encontrados**:
   - BUG-007: Vercel auto-pause (resuelto vía migración)
   - BUG-008: handler webhook acepta firmas inválidas (preexistente; pendiente fix antes de Fase 4)

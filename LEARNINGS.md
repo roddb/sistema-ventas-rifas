@@ -48,6 +48,20 @@
 
 - **2026-05-02** Técnico — `gcloud run deploy --source=.` por default crea/usa el repo `cloud-run-source-deploy` en Artifact Registry, NO un repo custom aunque exista. Para que aplique la cleanup policy de retención de imágenes, configurarla sobre `cloud-run-source-deploy` directamente. Crear repo custom y esperar que `--source` lo use es perder tiempo. _(Destino: solo registro)_ _(Origen: Task 6 fix)_
 
+### 2026-05-02 — Fix BUG-008 (webhook MercadoPago)
+
+- **2026-05-02** Convención técnica — El manifest oficial para verificar HMAC de webhooks IPN de MercadoPago es `id:<data.id>;request-id:<x-request-id>;ts:<ts>;` (separador `;`, trailing `;`, prefijos literales). NO es `<id>.<ts>` ni variantes. El header `x-signature` viene como `ts=...,v1=...` pero el orden NO está garantizado — siempre parsear por nombre. _(Destino: solo registro)_ _(Origen: BUG-008-A diagnóstico)_
+
+- **2026-05-02** Convención técnica — En el handler webhook MP, devolver **5xx en errores transitorios** (BD, MP API timeout, network) habilita la retry policy de MP (3 intentos en ~22 min). Devolver 200 en errores anti-patrón: descarta la red de seguridad. Solo devolver 200 en éxito explícito o ignorables (event types desconocidos). 4xx para validación (firma, body). _(Destino: solo registro)_ _(Origen: BUG-008-F)_
+
+- **2026-05-02** Convención técnica — Funciones de verificación de seguridad (HMAC, JWT, etc.) NUNCA deben tirar excepción ante input malformado. Si `crypto.timingSafeEqual` con buffers de distinta longitud lanza, el catch externo del handler la traga y la lógica falla abierta (devuelve 200). Pre-validar longitudes y envolver en `try/catch` que devuelve `false` por default. _(Destino: solo registro)_ _(Origen: BUG-008-C)_
+
+- **2026-05-02** Técnico — El `ts` del header `x-signature` de MercadoPago viene en **milisegundos** (epoch ms, 13 dígitos), no en segundos. La doc oficial es ambigua — solo se descubre con tráfico real. Heurística para detectar: si `ts > 1e11`, está en ms. Normalizar a segundos solo para validación de ventana de tiempo; mantener el ts original (string) en el manifest HMAC porque ese es el valor que MP firma. _(Destino: solo registro)_ _(Origen: BUG-008-G descubierto en E2E)_
+
+- **2026-05-02** Convención de proceso — Validación E2E con simulación dashboard MP es OBLIGATORIA antes de cerrar fix de webhook. Tests unitarios + curl con firmas forjadas no descubren bugs como 008-G porque dependen del comportamiento real del proveedor. _(Destino: solo registro)_ _(Origen: BUG-008-G)_
+
+- **2026-05-02** Técnico — Idempotencia + locks optimistas en operaciones de BD que un webhook puede invocar múltiples veces: `UPDATE ... WHERE id=? AND paymentStatus='pending'` + `.returning()` + chequeo `length === 0` → throw → catch externo → 503 → MP reintenta cuando estado se estabiliza. Patrón aplicable a cualquier handler que recibe IPNs/notifications con retry policy. _(Destino: solo registro)_ _(Origen: BUG-008-E + concurrency-validator review)_
+
 ### 2026-05-01 — Tarea 1.1 (npm audit + bump de seguridad)
 
 - **2026-05-01** Error evitable — `npm audit fix --force` en este repo bajaría `mercadopago` a `0.5.0` (downgrade catastrófico que rompe el flujo de pago). NUNCA correr `--force` sin revisar las advertencias de "breaking change" línea por línea. La salida del audit muestra explícitamente qué paquete bajaría a qué versión: leerla. _(Destino: solo registro)_ _(Origen: tarea 1.1 reactivación 2026)_

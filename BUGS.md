@@ -8,8 +8,8 @@
 
 ## Resumen
 - **Total bugs registrados**: 8
-- **Resueltos**: 7
-- **Pendientes**: 1
+- **Resueltos**: 8
+- **Pendientes**: 0
 
 > Histórico migrado desde `old_docs/Historial.md` (sesión inaugural 2025-09-11). A partir de la reactivación 2026-05-01, los nuevos bugs se numeran BUG-006+.
 
@@ -105,18 +105,35 @@
 
 ---
 
-### BUG-008 | PENDIENTE
+### BUG-008 | RESUELTO
 - **Fecha detectado**: 2026-05-02 (durante cutover MP de migración Cloud Run, Task 9)
-- **Descripción**: El handler `app/api/webhooks/mercadopago/route.ts` línea ~64 tiene comentado el `return NextResponse.json({error:'Invalid signature'}, {status:401})`. Cuando la firma HMAC del webhook no valida, el handler **logea "Invalid webhook signature"** pero **igualmente procesa el body con HTTP 200**.
-- **Contexto**: Detectado al ejecutar "Simular notificación" desde MP dashboard contra el nuevo endpoint en Cloud Run. La simulación retornó 200 y los logs mostraron `Invalid webhook signature` seguido por procesamiento normal del payload (intentó fetch del payment, falló con "not found" porque el ID era falso).
-- **Severidad**: ALTA. Cualquier atacante puede mandar POST forjado a `/api/webhooks/mercadopago` y el handler lo aceptará. La única defensa hoy es el fetch posterior a la API real de MP, pero si el atacante usa un ID válido (ej. de transacción real con otro merchant), podría manipular `purchases.status`.
-- **Causa raíz**: Código preexistente desde 2025. Alguien comentó el return 401 para debugging y nunca lo restauró. La migración a Cloud Run NO introdujo el bug, solo lo expuso al revisar logs durante el cutover.
-- **Fix obligatorio antes de Fase 4 (lanzamiento)**:
-  1. Descomentar el return 401 en `app/api/webhooks/mercadopago/route.ts`.
-  2. Verificar que `MERCADO_PAGO_WEBHOOK_SECRET` en Secret Manager coincide con el secret en el dashboard de MP (puede haberse regenerado durante el cutover).
-  3. Re-correr "Simular notificación" — debe devolver 401 si firma inválida, 200 si válida.
-- **Archivos afectados**: `app/api/webhooks/mercadopago/route.ts` línea ~62-66.
-- **Fecha resuelto**: PENDIENTE
+- **Fecha resuelto**: 2026-05-02
+- **Descripción inicial**: El handler `app/api/webhooks/mercadopago/route.ts` aceptaba webhooks con firma HMAC inválida y devolvía HTTP 200.
+- **Diagnóstico expandido**: bajo el síntoma visible había 7 sub-bugs encadenados. 6 fueron identificados por `diagnosis-specialist` antes de implementar; el séptimo (008-G) salió solo durante validación E2E porque requería tráfico real de MP para reproducirse.
+  - **008 base**: `return NextResponse.json({error:'Invalid signature'}, {status:401})` comentado desde commit inicial 2025-09-11 (`437776e4`). Era "temporal para testing" y nunca se restauró.
+  - **008-A** (más grave): manifest HMAC mal construido. Código generaba `<paymentId>.<ts>` cuando MP exige `id:<data.id>;request-id:<x-request-id>;ts:<ts>;`. **Ninguna firma válida hubiera matcheado nunca** incluso con secret correcto.
+  - **008-B**: parseo del header `x-signature` por posición (`parts[0]`, `parts[1]`) en vez de por nombre. Frágil ante cambios de orden o campos extra.
+  - **008-C**: `crypto.timingSafeEqual` lanza excepción con buffers de longitudes distintas; el catch externo la tragaba y devolvía 200.
+  - **008-D**: bypass por header faltante — `if (!signature) return false` combinado con return 401 comentado dejaba que cualquier POST sin `x-signature` fuera procesado.
+  - **008-E**: `RaffleService.confirmPayment` no era idempotente. MP retries (3 en ~22 min) sobreescribían `soldAt` y duplicaban event logs.
+  - **008-F**: el catch externo del POST devolvía 200 incluso en errores transitorios. Comentario decía "para evitar reintentos" — anti-patrón: descartaba la red de seguridad de IPN.
+  - **008-G** (descubierto en E2E Task 5): el `ts` del header `x-signature` viene de MP en **milisegundos** (epoch ms, 13 dígitos), no en segundos. El código asumía segundos en `Math.abs(now - ts) > 600`, lo cual rechazaba TODAS las firmas legítimas con `skew sec: -1.7×10¹²`. Debug logs revelaron `ts header: 1777861637614` cuando la simulación MP llegó al endpoint. Fix: detectar formato (ts > 1e11 = ms) y normalizar a segundos solo para validación de ventana, manteniendo el ts original (string) en el manifest porque ese es el valor que MP firma.
+- **Causa raíz**: implementación inicial del webhook (commit `437776e4`, 2025-09-11) usó un manifest simplificado para hacer pruebas rápidas en sandbox y nunca se reemplazó por el formato oficial. La rifa 2025 corrió con este bug; mitigación implícita fue que `getPaymentInfo(paymentId)` contra MP API filtraba IDs falsos por `external_reference`.
+- **Causa raíz secundaria (008-G)**: la doc oficial de MP no especifica claramente el formato del ts en el header (algunos ejemplos lo muestran en segundos, otros en ms). Solo se descubre con tráfico real.
+- **Solución aplicada**:
+  - Nuevo módulo `lib/webhook-verification.ts` con manifest oficial + parseo robusto + validación de timestamp con normalización ms→sec + replay protection (MAX_TIMESTAMP_AGE_SECONDS=600).
+  - 15 tests unitarios con `node:test` built-in en `tests/webhook-verification.test.mjs` (incluye 2 casos para format ms y replay con ms).
+  - Handler `app/api/webhooks/mercadopago/route.ts` reescrito: rechaza con 400 si falta `body.data.id`, 401 si firma inválida o secret no configurado, 503 en errores transitorios (habilita retries de MP).
+  - `RaffleService.confirmPayment` y `cancelPayment` ahora atómicos en `db.transaction()` con locks optimistas (WHERE paymentStatus='pending' / status='reserved') + idempotencia (return early si ya 'approved').
+  - `releaseExpiredReservations` con guards en UPDATE raffleNumbers (status='reserved') y UPDATE purchases (paymentStatus='pending') para no pisar estados confirmados.
+  - Log `PAYMENT_CONFLICT` en eventLogs (fuera de tx) cuando hay race detectada.
+- **Validación**:
+  - 15 tests unitarios pasan.
+  - 4 tests E2E pasan (sin firma → 401, sin data.id → 400, firma forjada → 401, simulación dashboard MP → "Webhook signature verified successfully" + 503 por id ficticio = comportamiento correcto).
+  - `npm run lint && npm run build` verdes.
+- **Archivos afectados**: `lib/webhook-verification.ts` (nuevo), `tests/webhook-verification.test.mjs` (nuevo), `tests/run-tests.sh` (nuevo), `app/api/webhooks/mercadopago/route.ts`, `lib/services/raffleService.ts:347+` (confirmPayment + cancelPayment + releaseExpiredReservations), `package.json`.
+- **Auditoría retroactiva pendiente**: query a `event_logs` 2025 para detectar webhooks procesados sin firma válida. **Tarea separada**, no crítica (MP API filtró IDs falsos por external_reference).
+- **Acción de seguridad pendiente**: el `MERCADO_PAGO_WEBHOOK_SECRET` fue pegado completo en chat durante diagnóstico Task 4. Recomendado regenerar el secret en MP dashboard, actualizarlo en GCP Secret Manager (`gcloud secrets versions add mp-webhook-secret`) y redeployar antes de Fase 4.
 
 ---
 

@@ -63,6 +63,27 @@
 
 ## Bitácora
 
+### 2026-05-02 — BUG-008 cerrado al 100% (webhook MercadoPago seguro para Fase 4)
+- **Resumen**: Fix completo de BUG-008 + 6 sub-bugs encadenados (008-A a 008-F) identificados por `diagnosis-specialist`, más BUG-008-G descubierto durante E2E (ts en ms). Webhook ahora valida firmas legítimas, rechaza bypasses, es idempotente y maneja correctamente la política de retries de MP.
+- **Bugs resueltos**: BUG-008 base + 008-A (manifest mal construido) + 008-B (parseo posicional) + 008-C (timingSafeEqual sin guard) + 008-D (bypass sin header) + 008-E (no idempotencia) + 008-F (200 en errores transitorios) + 008-G (ts en ms vs segundos)
+- **Acciones**:
+  - Plan: `docs/superpowers/plans/2026-05-02-fix-bug-008-webhook-mp.md` (6 tasks)
+  - 6 commits ejecutados con subagent-driven-development:
+    - 3627d28: módulo verifyMercadoPagoWebhookSignature + 13 tests TDD
+    - c1404b8: handler reescrito (cerrar bypasses)
+    - 4cb6977: nits del review de Task 2
+    - 3e3b3b7: idempotencia + locks optimistas en confirmPayment + cleanup
+    - 8501c2a: nits del review de Task 3 (cancelPayment con guards, log PAYMENT_CONFLICT)
+    - 6233846: normalizar ts en milisegundos (BUG-008-G E2E)
+  - Reviewers obligatorios pasaron: spec compliance + code quality + concurrency-validator + db-migration-reviewer en cada task aplicable
+  - 15 tests unitarios passing
+  - 4 tests E2E passing (último: simulación MP dashboard → "Webhook signature verified successfully")
+- **Archivos modificados**: `lib/webhook-verification.ts` (nuevo), `tests/webhook-verification.test.mjs` (nuevo), `tests/run-tests.sh` (nuevo), `app/api/webhooks/mercadopago/route.ts`, `lib/services/raffleService.ts`, `package.json`
+- **Pendiente**:
+  - Auditoría retroactiva de event_logs 2025 (no crítica, separable)
+  - Regenerar `MERCADO_PAGO_WEBHOOK_SECRET` (fue expuesto en chat durante diagnóstico)
+- **Próxima tarea**: 1.5 — `npm run dev` local + smoke test del flujo completo en sandbox MP, ahora con webhook seguro post-BUG-008.
+
 ### 2026-05-02 — Migración Vercel → Cloud Run completada
 - **Resumen**: Cuenta Vercel del usuario quedó pausada por flag de uso comercial; proyecto eliminado por la pausa. Migración completa a Google Cloud Run (us-east1) bajo cuenta intellego.ok@gmail.com.
 - **Tareas completadas**: 1.4
@@ -139,4 +160,4 @@
 
 ## Próxima tarea
 
-**1.5** — `npm run dev` local + smoke test del flujo completo en sandbox MP, validando que la integración Cloud Run + Turso + MP no tiene regresiones. Considerar priorizar fix de BUG-008 (return 401 comentado en webhook handler) antes de Fase 4.
+**1.5** — `npm run dev` local + smoke test del flujo completo en sandbox MP, validando que la integración Cloud Run + Turso + MP no tiene regresiones, ahora con webhook seguro post-BUG-008. Antes de Fase 4: regenerar MERCADO_PAGO_WEBHOOK_SECRET (fue expuesto en chat).
