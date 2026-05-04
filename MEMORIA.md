@@ -3,15 +3,17 @@
 ## Proyecto: Sistema de Ventas de Rifas Escolares
 ## Repositorio: https://github.com/roddb/sistema-ventas-rifas
 ## Producción: https://sistema-ventas-rifas-kc5dasqukq-ue.a.run.app (Cloud Run, us-east1)
-## Último save: 2026-05-02 — Save #2 (cierre Fase 1 + migración Cloud Run + fix BUG-008)
+## Último save: 2026-05-04 — Save #3 (cierre Fase 2 + fix BUG-009)
 
 ---
 
 ## Contexto Actual
 
-Reactivación 2026 con Fase 0 (modernización de gestión) cerrada al 100% y primera verificación técnica completada. `npm run lint` y `npm run build` pasan limpios tras 8 meses de inactividad — el código sigue compilando con el stack original (Next.js 14.2.5, Drizzle 0.32.2, MP SDK 2.0.15). El working tree del proyecto contenía exports productivos con PII real (BUG-006); ya están blindados por `.gitignore`.
+Fases 0, 1 y 2 cerradas al 100%. Reactivación 2026 lista del lado de BD y UI: la BD productiva Turso `sistema-de-riffas` tiene una sola rifa activa (id=2, "Rifa Escolar 2026", 2.000 números a $2.000, sin fecha de sorteo definida, `endDate` placeholder 2026-12-31). El frontend en Cloud Run (revision `00008-bg2`) renderiza correctamente la grilla con los 2.000 números disponibles tras fix de BUG-009 (loop infinito en `useEffect` que estuvo latente 8 meses oculto detrás del flag `VENTAS_CERRADAS=true`).
 
-El estado funcional al cierre de octubre 2025 era: producción estable, integración MP completa, tests de concurrencia pasando, BD limpia con la configuración "Rifa Escolar 2025" (2.000 números a $2.000). Las próximas sesiones (Fase 1) deben (a) `npm audit` + revalidación de deps, (b) verificación de credenciales MP/Turso/Vercel vigentes (token PROD pudo haber rotado), (c) re-ejecutar tests de concurrencia. Recién después se entra a Fase 2 (limpieza de BD 2025 + setup rifa 2026).
+El estado funcional al cierre de octubre 2025 fue producción estable con la rifa "Rifa Escolar 2025" (corrigiendo dato previo de MEMORIA: la 2025 tuvo **1.500 números, no 2.000** — el default del schema). 134 compras `approved`, 1.081 números `sold`, 9 reservas que nunca se cerraron en `pending`. Todo ese estado quedó respaldado en `backups/rifa-2025-backup-2026-05-04.json` (gitignored, 830 KB) antes del reset.
+
+Pendientes pre-Fase 4 (gates obligatorios antes del lanzamiento): (a) regenerar `MERCADO_PAGO_WEBHOOK_SECRET` que se expuso en chat 2026-05-02 durante diagnóstico BUG-008, (b) configurar Cloud Scheduler para `/api/cron/cleanup` cada 5 min (en Vercel había auto-cron, en Cloud Run hay que setearlo). Después: Fase 4 (deploy ya en prod / smoke E2E con compra real / anuncio / monitoreo). La Fase 3 (mejoras: auth admin, email post-compra, exportes, backup BD) queda postergada post-lanzamiento.
 
 ## Decisiones de Diseño
 
@@ -79,7 +81,7 @@ El estado funcional al cierre de octubre 2025 era: producción estable, integrac
 
 ## Notas Importantes
 
-- **BD productiva tiene datos viejos**: la tabla `raffles` aún tiene "Rifa Escolar 2025" como activa y `raffle_numbers` están pobladas con esa configuración. Limpieza pendiente Fase 2.2.
+- **BD productiva ya limpia y reconfigurada (2026-05-04)**: 1 sola rifa activa (id=2, "Rifa Escolar 2026", 2.000 números a $2.000). Backup completo de la rifa 2025 en `backups/rifa-2025-backup-2026-05-04.json`.
 - **Credenciales MP**: el access token de producción puede haber rotado o expirado tras 8 meses. Verificar en Fase 1.2 antes de cualquier deploy.
 - **Auth token Turso**: idem MP — verificar vigencia.
 - **No hay tests automatizados unitarios**: los tests están limitados a concurrencia (3 scripts en raíz). Si se agrega lógica nueva en `raffleService` considerar tests adicionales.
@@ -91,8 +93,13 @@ El estado funcional al cierre de octubre 2025 era: producción estable, integrac
 
 ## Histórico de la rifa 2025 (referencia)
 
-Rifa cerrada en octubre 2025. Datos resumidos:
-- 2.000 números, $2.000 cada uno, total ventas brutas estimadas: $4M (verificar en BD si se necesita exactitud)
+Rifa cerrada en octubre 2025. Datos reales (extraídos de la BD el 2026-05-04 antes del reset):
+- **1.500 números** (no 2.000 como decía esta MEMORIA antes — era el default del schema), $2.000 cada uno
+- 1.081 números `sold`, 419 `available` (no se vendió todo), 0 `reserved`
+- 143 compras: 134 `approved`, 9 `pending` que nunca se cerraron, 0 `rejected/cancelled`
+- 950 entradas en `purchase_numbers` (inconsistencia de 131 sold sin entrada — residuo de BUG-H002)
+- 417 entradas en `event_logs`
+- Backup completo en `backups/rifa-2025-backup-2026-05-04.json` (830 KB, gitignored)
 - Compradores de prueba documentados en `old_docs/Historial.md`: Rodrigo Di Bernardo (números 1, 2 — $4.000), Rosario Aguerre (números 4, 5 — $4.000)
 - Sistema funcionó sin sobreventa reportada
 - Documentación de la integración MP en `old_docs/INTEGRACION_MERCADOPAGO.md` y `old_docs/TUTORIAL_MERCADOPAGO.md`
@@ -101,6 +108,23 @@ Rifa cerrada en octubre 2025. Datos resumidos:
 ---
 
 ## Historial de Sesiones
+
+### Sesión 3 — 2026-05-04 (cierre Fase 2 + fix BUG-009)
+- **Duración aproximada**: ~2h
+- **Resumen**: Configuración de la rifa 2026 en BD productiva (Fase 2 completa) + descubrimiento y fix de BUG-009 (loop infinito en `useEffect` latente desde 2025).
+- **Logros**:
+  - Parámetros decididos (2.1): 2.000 números a $2.000, sin fecha de sorteo definida (manual cuando sea), sin premios documentados.
+  - Script nuevo `scripts/setup-rifa-2026.mjs` con 2 modos (`--backup-only` por default, `--commit --yes` destructivo). Validado por `db-migration-reviewer` antes de ejecutar.
+  - Backup completo de la BD 2025 a `backups/rifa-2025-backup-2026-05-04.json` (gitignored, 830 KB con PII completa de los 134 compradores).
+  - Reset destructivo en transacción atómica: DELETE en orden por FKs (`purchase_numbers` → `event_logs` → `purchases` → `raffle_numbers` → `raffles`), INSERT 1 nueva rifa (`raffleId=2`), batch INSERT 2.000 `raffle_numbers` en chunks de 500.
+  - 2 deploys a Cloud Run: revision `00007-bbh` (cambio título dinámico + `VENTAS_CERRADAS=false`), revision `00008-bg2` (fix BUG-009 split useEffect).
+  - Verificación final: `/api/raffle/config` devuelve "Rifa Escolar 2026" / 2.000 / $2.000 / id=2; `/api/numbers` devuelve 2.000 disponibles; UI renderiza grilla completa.
+- **Problemas encontrados**:
+  - **Bug pre-flight `dotenv@17`**: por default no sobrescribe vars del shell. El shell del dev tenía `TURSO_DATABASE_URL` exportada apuntando a `planificador-docente`; el script habría reseteado la BD equivocada. Fix con `loadEnv({ override: true })` antes de cualquier query.
+  - **Bug pre-flight orden DELETE**: `db-migration-reviewer` detectó que el orden propuesto borraba `purchases` antes que `event_logs`, violando FK `event_logs.purchase_id → purchases.id`. Reordenado pre-ejecución.
+  - **BUG-009** (productivo, descubierto en 2.5): loop infinito de re-render en `RifasApp.tsx` que mantenía `loading=true`. Latente por 8 meses oculto detrás de `VENTAS_CERRADAS=true`.
+  - **Hardcodeos en componente**: título "Rifa Escolar 2025" en `RifasApp.tsx:1440`. Cambiado a leer `raffleConfig.title`. La constante `VENTAS_CERRADAS` también es hardcoded — promovida a deuda técnica para derivar de `raffleConfig.isActive` en una próxima iteración.
+- **Estado al cerrar**: Rifa 2026 servida en producción con grilla funcional. Próxima sesión arranca con los 2 gates pre-Fase 4 (regenerar webhook secret + Cloud Scheduler) y luego smoke E2E con compra real (4.2).
 
 ### Sesión 2 — 2026-05-02 (migración Vercel → Cloud Run)
 - **Duración aproximada**: ~3h

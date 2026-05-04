@@ -258,6 +258,8 @@ En Vercel: las mismas variables deben estar configuradas para Production y Previ
 
 - **2025-09-14** Técnico — Las pruebas de concurrencia (`run-concurrency-test.js`) deben correrse con el dev server activo y delays aleatorios 0-200ms para simular condiciones reales. Cualquier cambio en `raffleService.reserveNumbers()` o el schema de `raffle_numbers` exige re-ejecutar el test. _(Origen: TEST_CONCURRENCIA.md)_
 
+- **2026-05-04** Herramienta — Cualquier script Node de este repo que use `dotenv` para leer `.env.local` y conectarse a Turso/MP DEBE usar `loadEnv({ path: '.env.local', override: true })`. Sin `override: true`, dotenv 17.x respeta variables ya exportadas en el shell — el shell del dev tiene `TURSO_DATABASE_URL` apuntando a otra BD (`planificador-docente`), y un script descuidado tocaría la BD equivocada. Aplica a `scripts/*.mjs` y a cualquier helper de migración. _(Origen: bug pre-flight `scripts/setup-rifa-2026.mjs` 2026-05-04 — el script habría reseteado la BD equivocada de no haberse detectado)_
+
 ---
 
 > Archivos de gestión: `ESTADO.md` (checklist + bitácora), `MEMORIA.md` (contexto y decisiones), `BUGS.md` (incidentes), `LEARNINGS.md` (aprendizajes técnicos), `README.md` (instalación y deploy).

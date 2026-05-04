@@ -2,13 +2,13 @@
 
 ## Proyecto: Sistema de Ventas de Rifas Escolares
 ## Iniciado: 2025-09-11
-## Última actualización: 2026-05-01
+## Última actualización: 2026-05-04
 
 ---
 
 ## Resumen
-- **Total bugs registrados**: 8
-- **Resueltos**: 8
+- **Total bugs registrados**: 9
+- **Resueltos**: 9
 - **Pendientes**: 0
 
 > Histórico migrado desde `old_docs/Historial.md` (sesión inaugural 2025-09-11). A partir de la reactivación 2026-05-01, los nuevos bugs se numeran BUG-006+.
@@ -134,6 +134,31 @@
 - **Archivos afectados**: `lib/webhook-verification.ts` (nuevo), `tests/webhook-verification.test.mjs` (nuevo), `tests/run-tests.sh` (nuevo), `app/api/webhooks/mercadopago/route.ts`, `lib/services/raffleService.ts:347+` (confirmPayment + cancelPayment + releaseExpiredReservations), `package.json`.
 - **Auditoría retroactiva pendiente**: query a `event_logs` 2025 para detectar webhooks procesados sin firma válida. **Tarea separada**, no crítica (MP API filtró IDs falsos por external_reference).
 - **Acción de seguridad pendiente**: el `MERCADO_PAGO_WEBHOOK_SECRET` fue pegado completo en chat durante diagnóstico Task 4. Recomendado regenerar el secret en MP dashboard, actualizarlo en GCP Secret Manager (`gcloud secrets versions add mp-webhook-secret`) y redeployar antes de Fase 4.
+
+---
+
+### BUG-009 | RESUELTO
+- **Fecha detectado**: 2026-05-04 (smoke test UI Fase 2.5 inmediatamente después de `VENTAS_CERRADAS=true → false`)
+- **Fecha resuelto**: 2026-05-04
+- **Descripción**: La grilla de números quedaba colgada en "Cargando números..." indefinidamente al cargar la home productiva, aunque el chip lateral mostraba correctamente "2.000 disponibles". Estado `loading` permanentemente en `true`.
+- **Contexto**: Tras cambiar la constante hardcoded `VENTAS_CERRADAS = true` → `false` para reactivar la grilla con la rifa 2026, apareció el bug. El cambio destapó un bug latente de 8 meses.
+- **Error/Síntoma**: UI muestra spinner "Cargando números..." en el componente `NumberGrid`, mientras que `numbers` array está poblado con 2.000 entradas (lo confirmaba el chip "✓ 2000 disponibles"). Auto-refresh disparándose en bucle (visible en console.log "Auto-refreshing numbers..." cada cientos de ms).
+- **Causa raíz**: Loop infinito en `useEffect` de `RifasApp.tsx:600-629`. Las deps eran `[loadNumbers, selectedNumbers, currentStep, getNumberStatus]`. `getNumberStatus` es `useCallback` con dep `[numbers, selectedNumbers]`. Flujo del loop:
+  1. `loadNumbers()` setea `numbers` (estado)
+  2. `numbers` cambia → `getNumberStatus` se recrea (nueva referencia)
+  3. `getNumberStatus` cambia → el `useEffect` re-corre por su dep array
+  4. Re-corrida llama `loadNumbers()` de nuevo → goto 1
+  
+  El estado `loading` quedaba constantemente en `true` porque `setLoading(true)` se llamaba al inicio de cada `loadNumbers()` antes de que el `setLoading(false)` del finally anterior se reflejara en render.
+- **Por qué no se detectó antes**: el componente `NumberGrid` tiene un `if (VENTAS_CERRADAS) return <pantalla de "Gracias por participar"/>` ANTES del check `if (loading)`. Con `VENTAS_CERRADAS=true` durante toda la rifa 2025 y los 8 meses de pausa, la rama del bug nunca se ejecutaba en runtime. Las warnings de ESLint (`react-hooks/exhaustive-deps`) en líneas 629/665/683 estaban presentes pero asumidas como pre-existentes inocuas.
+- **Solución aplicada**: separar el `useEffect` en dos:
+  - **Polling**: dep única `[loadNumbers]` (estable, `useCallback` con `[]`). Solo carga inicial + `setInterval` cada 10s.
+  - **Validación de selección**: deps reactivas `[numbers, selectedNumbers, currentStep, getNumberStatus, setError, setSelectedNumbers]`. Solo verifica que los seleccionados sigan disponibles cuando cambian; no llama `loadNumbers`.
+  
+  Esta separación rompe el ciclo: cambios en `numbers` ya no reinician el polling.
+- **Validación**: `npm run lint` pasa (warning del effect 629 desapareció), `npm run build` verde, deploy revision `00008-bg2`, smoke UI confirma grilla renderizando 2.000 números.
+- **Archivos afectados**: `components/RifasApp.tsx` (2 cambios: split del useEffect; cambio simultáneo de `VENTAS_CERRADAS` y title hardcoded en la misma sesión, no atribuibles a este bug pero deployados juntos).
+- **Deuda técnica residual**: `VENTAS_CERRADAS` sigue siendo constante hardcoded a nivel módulo. Lo correcto sería derivarlo de `raffleConfig.isActive` (la BD ya tiene `is_active=true` para la rifa 2026, y `is_active=false` cerraría las ventas sin redeploy). Pendiente para una próxima iteración.
 
 ---
 

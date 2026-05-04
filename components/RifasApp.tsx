@@ -4,7 +4,7 @@ import { ShoppingCart, User, School, Phone, Mail, CreditCard, Check, X, Clock, A
 // =========== CONFIGURACIÓN Y TIPOS ===========
 
 // CONTROL DE CIERRE DE VENTAS - Cambiar a false para reactivar las ventas
-const VENTAS_CERRADAS = true;
+const VENTAS_CERRADAS = false;
 
 interface RaffleNumber {
   id: number;
@@ -596,37 +596,34 @@ const RifasApp = () => {
   const TOTAL_NUMBERS = raffleConfig?.totalNumbers || 1500;
   const RESERVATION_TIMEOUT = 15 * 60; // 15 minutos en segundos
 
-  // Cargar números al montar el componente y actualizar periódicamente
+  // Mount + polling cada 10s. Sin deps reactivas para evitar loop infinito:
+  // antes el effect tenía [loadNumbers, selectedNumbers, currentStep, getNumberStatus],
+  // y como getNumberStatus depende de `numbers`, cada loadNumbers reiniciaba el effect → loop.
   useEffect(() => {
     loadNumbers();
-    
-    // MEJORADO: Actualizar números cada 10 segundos para mejor sincronización
     const interval = setInterval(() => {
       console.log('Auto-refreshing numbers...');
       loadNumbers();
-      
-      // Si hay números seleccionados, verificar si siguen disponibles
-      if (selectedNumbers.size > 0 && currentStep === 'selection') {
-        const unavailable = Array.from(selectedNumbers).filter(num => {
-          const status = getNumberStatus(num);
-          return status === 'sold' || status === 'reserved';
-        });
-        
-        if (unavailable.length > 0) {
-          // Alertar al usuario que algunos números ya no están disponibles
-          setError(`¡Atención! Los números ${unavailable.join(', ')} ya fueron reservados por otro usuario.`);
-          // Deseleccionar números no disponibles
-          setSelectedNumbers(prev => {
-            const newSet = new Set(prev);
-            unavailable.forEach(num => newSet.delete(num));
-            return newSet;
-          });
-        }
-      }
-    }, 10000); // Reducido de 30s a 10s
-    
+    }, 10000);
     return () => clearInterval(interval);
-  }, [loadNumbers, selectedNumbers, currentStep, getNumberStatus]);
+  }, [loadNumbers]);
+
+  // Validación de selección: cuando cambian `numbers` o la selección, chequear que
+  // los seleccionados sigan disponibles. Separado del polling para no retroalimentarlo.
+  useEffect(() => {
+    if (currentStep !== 'selection' || selectedNumbers.size === 0) return;
+    const unavailable = Array.from(selectedNumbers).filter((num) => {
+      const status = getNumberStatus(num);
+      return status === 'sold' || status === 'reserved';
+    });
+    if (unavailable.length === 0) return;
+    setError(`¡Atención! Los números ${unavailable.join(', ')} ya fueron reservados por otro usuario.`);
+    setSelectedNumbers((prev) => {
+      const newSet = new Set(prev);
+      unavailable.forEach((num) => newSet.delete(num));
+      return newSet;
+    });
+  }, [numbers, selectedNumbers, currentStep, getNumberStatus, setError, setSelectedNumbers]);
 
   // Manejar retorno desde MercadoPago
   useEffect(() => {
@@ -1437,7 +1434,7 @@ const RifasApp = () => {
               }}
             >
               <h1 className="text-2xl font-bold text-gray-800 hover:text-blue-600 transition-colors">
-                🎫 Rifa Escolar 2025
+                🎫 {raffleConfig?.title || 'Rifa Escolar'}
               </h1>
               <p className="text-gray-600 mt-1">
                 Selecciona tus números de la suerte • {numbers.filter(n => n.status === 'sold').length}/{TOTAL_NUMBERS} vendidos

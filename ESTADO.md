@@ -6,7 +6,7 @@
 - **Producción**: https://sistema-ventas-rifas-kc5dasqukq-ue.a.run.app (Cloud Run, us-east1)
 - **Última edición productiva**: Septiembre–Octubre 2025 (rifa escolar 2025)
 - **Estado actual**: Reactivación 2026 — proyecto dado de baja al cerrar la rifa anterior, vuelve a levantarse para nueva edición
-- **Última sesión**: 2026-05-02 — migración Vercel → Cloud Run completada (proyecto sistema-ventas-rifas-prod, us-east1, 100% Free Tier)
+- **Última sesión**: 2026-05-04 — Fase 2 cerrada (rifa 2026 configurada en BD productiva: 2.000 números a $2.000) + fix BUG-009 (loop infinito useEffect oculto por 8 meses)
 - **Versiones previas de la documentación**: `old_docs/` (CLAUDE.md viejo, README, Historial, INTEGRACION_MERCADOPAGO, TUTORIAL_MERCADOPAGO, TEST_CONCURRENCIA)
 
 ---
@@ -37,11 +37,11 @@
 - [~] 1.6 Re-ejecutar `node run-concurrency-test.js` post fix BUG-008 - SKIPPED por decisión usuario 2026-05-02 — hacer pre-Fase 4, los locks optimistas de Task 3 alteran el camino crítico
 
 ### Fase 2: Configuración de la nueva rifa 2026
-- [ ] 2.1 Decidir parámetros: total de números, precio, fecha del sorteo, premios - DEV
-- [ ] 2.2 Reset de la BD: borrar `purchases`, `purchase_numbers`, `event_logs` de la rifa 2025 - DEV
-- [ ] 2.3 Crear nuevo registro en tabla `raffles` con configuración 2026 - DEV
-- [ ] 2.4 Re-poblar `raffle_numbers` (todos en `available`) según `totalNumbers` - DEV
-- [ ] 2.5 Verificar grilla en UI con la nueva configuración - TEST
+- [x] 2.1 Decidir parámetros: 2.000 números a $2.000, sin fecha de sorteo (manual), sin premios documentados - DEV
+- [x] 2.2 Reset de la BD: backup completo a `backups/rifa-2025-backup-2026-05-04.json` (gitignored) + DELETE en orden por FKs (purchase_numbers → event_logs → purchases → raffle_numbers → raffles) - DEV
+- [x] 2.3 INSERT en `raffles`: id=2, "Rifa Escolar 2026", totalNumbers=2000, pricePerNumber=2000, endDate=2026-12-31 placeholder, isActive=true - DEV
+- [x] 2.4 Re-poblar `raffle_numbers` 1-2000 todos en `available`, batch en chunks de 500, validado por `db-migration-reviewer` - DEV
+- [x] 2.5 Smoke test UI productiva: GET /api/raffle/config + GET /api/numbers OK; render frontend OK tras fix BUG-009 - TEST
 
 ### Fase 3: Mejoras priorizadas
 > Items pendientes detectados en Historial.md sesión 2 + ideas nuevas. Re-priorizar antes de Fase 3.
@@ -62,6 +62,32 @@
 ---
 
 ## Bitácora
+
+### 2026-05-04 — Save #3 (cierre de Fase 2 + fix BUG-009)
+- **Tareas completadas**: 2.1 a 2.5 — Fase 2 al 100%
+- **Bugs cerrados**: BUG-009 (loop infinito useEffect en RifasApp.tsx oculto por 8 meses detrás de `VENTAS_CERRADAS=true`)
+- **Próxima tarea**: pre-Fase 4 (regenerar `MERCADO_PAGO_WEBHOOK_SECRET` + configurar Cloud Scheduler para `/api/cron/cleanup` cada 5 min) y luego 4.1 deploy / 4.2 smoke E2E con compra real. La Fase 3 (mejoras) queda postergada post-lanzamiento por decisión implícita del usuario.
+- **Acciones principales**:
+  - Script nuevo `scripts/setup-rifa-2026.mjs` con 2 modos (`--backup-only` y `--commit --yes`). Validado por `db-migration-reviewer` antes de ejecutar — el reviewer encontró bug bloqueante (orden DELETE iba a violar FK `event_logs.purchase_id → purchases.id`), corregido pre-ejecución.
+  - Bug pre-flight `dotenv@17`: por default no sobrescribe vars del shell. El shell del dev tenía `TURSO_DATABASE_URL` exportada apuntando a `planificador-docente`, hubiese tocado la BD equivocada. Fix con `loadEnv({ override: true })`.
+  - Reset productivo en transacción atómica: borrado de 1.500 raffle_numbers + 143 purchases + 950 purchase_numbers + 417 event_logs (rifa 2025) → INSERT 1 raffle nueva (id=2) + 2.000 raffle_numbers en chunks de 500.
+  - Verificación API post-commit: `/api/raffle/config` devuelve la rifa 2026 correctamente; `/api/numbers` devuelve 2.000 disponibles.
+  - **Smoke UI mostró 2 problemas hardcoded**:
+    - Título "Rifa Escolar 2025" hardcoded en `RifasApp.tsx:1440` → cambio a `{raffleConfig?.title || 'Rifa Escolar'}`
+    - Constante `VENTAS_CERRADAS = true` (línea 7) → cambio a `false` (deuda técnica anotada para promover a derivado de `raffleConfig.isActive`)
+  - Tras el redeploy, la UI mostró la grilla colgada en "Cargando números..." indefinidamente → **BUG-009 descubierto**. Causa: `useEffect` con deps `[loadNumbers, selectedNumbers, currentStep, getNumberStatus]` donde `getNumberStatus` depende de `numbers` mutado por el propio effect → loop. Estuvo latente todo el 2025 oculto detrás del early-return de `VENTAS_CERRADAS=true`. Fix: separar el effect en dos (polling con dep única `loadNumbers` + validación de selección con deps reactivas pero sin disparar polling).
+- **Archivos modificados**:
+  - Nuevos: `scripts/setup-rifa-2026.mjs`, `backups/rifa-2025-backup-2026-05-04.json` (gitignored)
+  - Código: `components/RifasApp.tsx` (3 cambios: `VENTAS_CERRADAS`, title hardcoded, useEffect split)
+  - Config: `.gitignore` (patrón `backups/`)
+  - Meta: `ESTADO.md`, `MEMORIA.md`, `BUGS.md`, `LEARNINGS.md`
+- **Notas críticas**:
+  - **MEMORIA.md tenía dato incorrecto**: la rifa 2025 corrió con **1.500 números, no 2.000**. Capturado en backup tal cual.
+  - Inconsistencia preexistente en datos 2025: 167 sold sin entrada en purchase_numbers (BUG-H002 residual). Capturada en backup, irrelevante post-reset.
+  - Cambio en flujo de UI (`VENTAS_CERRADAS=false` + nuevo split de effects) **NO toca el flujo de pago ni concurrencia** → no requiere re-test.
+  - 2 deploys a Cloud Run: `00007-bbh` (cambio título + VENTAS_CERRADAS) y `00008-bg2` (fix BUG-009).
+  - Pre-Fase 4 sigue pendiente: regenerar `MERCADO_PAGO_WEBHOOK_SECRET` (expuesto en chat 2026-05-02) + configurar Cloud Scheduler para cron cleanup (auto perdido en migración Vercel→Cloud Run).
+- **Stats sesión**: ~2h, 2 deploys exitosos, 1 bug nuevo cerrado, 5 tareas completadas, 0 cargo extra GCP.
 
 ### 2026-05-02 — Save #2 (cierre de sesión consolidado)
 - **Tareas completadas**: 1.1 (npm audit), 1.2 (credenciales MP), 1.3 (conexión Turso), 1.4 (deploy productivo en Cloud Run)
@@ -178,7 +204,13 @@
 
 ## Próxima tarea
 
-**2.1** — Decidir parámetros de la rifa 2026 (total de números, precio, fecha del sorteo, premios). El usuario confirmó 2026-05-02 que la próxima sesión arranca directo en Fase 2 y avanza hasta Fase 4 saltando 1.5 y 1.6.
+**Pre-Fase 4 (gates de seguridad)** — antes del lanzamiento real:
+1. Regenerar `MERCADO_PAGO_WEBHOOK_SECRET` (fue expuesto en chat 2026-05-02). MP dashboard → Generar nueva clave → `gcloud secrets versions add mp-webhook-secret --data-file=-` → `./scripts/deploy.sh`.
+2. Configurar Cloud Scheduler para invocar `/api/cron/cleanup` cada 5 min (en Vercel había auto-cron, en Cloud Run hay que setearlo).
+
+**Después: Fase 4** — 4.1 (deploy con config 2026, ya en prod), 4.2 (smoke E2E con compra real de 1 número, cumple las skipped 1.5/1.6), 4.3 (anuncio), 4.4 (monitoreo 24h).
+
+**Fase 3 (mejoras: auth admin, email post-compra, exportes, backup BD)** queda postergada post-lanzamiento.
 
 ### Plan de la próxima sesión (Fases 2 → 4 al hilo)
 
