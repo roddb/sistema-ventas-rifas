@@ -54,15 +54,22 @@ export function verifyMercadoPagoWebhookSignature(params: VerifyParams): boolean
   if (!ts || !v1) return false;
 
   // Validar timestamp (mitigación de replay attacks).
-  const tsNumeric = Number.parseInt(ts, 10);
-  if (!Number.isFinite(tsNumeric)) return false;
+  // MP envía el ts en milisegundos (epoch ms, 13 dígitos). Normalizamos a segundos
+  // para comparar contra MAX_TIMESTAMP_AGE_SECONDS. Heurística: ts > 1e11 implica ms
+  // (sería año ~5138 si fuera segundos, claramente fuera de rango).
+  const tsRaw = Number.parseInt(ts, 10);
+  if (!Number.isFinite(tsRaw)) return false;
 
+  const tsSeconds = tsRaw > 1e11 ? Math.floor(tsRaw / 1000) : tsRaw;
   const nowSeconds = Math.floor(Date.now() / 1000);
-  if (Math.abs(nowSeconds - tsNumeric) > MAX_TIMESTAMP_AGE_SECONDS) {
+
+  if (Math.abs(nowSeconds - tsSeconds) > MAX_TIMESTAMP_AGE_SECONDS) {
     return false;
   }
 
-  // Construir el manifest oficial.
+  // Construir el manifest oficial. Se usa el ts ORIGINAL (string tal cual MP lo envió)
+  // porque ese es el valor que MP firmó. La normalización a segundos arriba es solo
+  // para validar la ventana de tiempo, no para alterar el manifest.
   const manifest = `id:${dataId};request-id:${requestId};ts:${ts};`;
 
   // Calcular HMAC esperado.

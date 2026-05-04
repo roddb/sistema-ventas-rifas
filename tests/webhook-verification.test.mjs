@@ -28,6 +28,32 @@ test('valid signature returns true', () => {
   assert.equal(result, true);
 });
 
+test('valid signature with ts in milliseconds returns true (MP sends ms)', () => {
+  // MercadoPago envía el ts en milisegundos (epoch ms, 13 dígitos).
+  const ts = Date.now().toString();
+  const v1 = signManifest(SECRET, DATA_ID, REQUEST_ID, ts);
+  const result = verifyMercadoPagoWebhookSignature({
+    signatureHeader: buildHeader(ts, v1),
+    requestId: REQUEST_ID,
+    dataId: DATA_ID,
+    secret: SECRET,
+  });
+  assert.equal(result, true);
+});
+
+test('replay attack with milliseconds ts beyond window returns false', () => {
+  // 30 minutos antes en ms — claramente fuera de la ventana de 10 min.
+  const oldTsMs = (Date.now() - 30 * 60 * 1000).toString();
+  const v1 = signManifest(SECRET, DATA_ID, REQUEST_ID, oldTsMs);
+  const result = verifyMercadoPagoWebhookSignature({
+    signatureHeader: buildHeader(oldTsMs, v1),
+    requestId: REQUEST_ID,
+    dataId: DATA_ID,
+    secret: SECRET,
+  });
+  assert.equal(result, false);
+});
+
 test('null signatureHeader returns false', () => {
   const result = verifyMercadoPagoWebhookSignature({
     signatureHeader: null,
