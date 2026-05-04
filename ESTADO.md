@@ -30,11 +30,11 @@
 
 ### Fase 1: Reactivación técnica
 - [x] 1.1 Revisar `package.json` y actualizar deps con vulnerabilidades críticas (npm audit) - DEV
-- [ ] 1.2 Verificar credenciales MercadoPago vigentes (token PROD puede haber expirado) - TEST
-- [ ] 1.3 Verificar conexión a Turso (auth token vigente) - TEST
-- [x] 1.4 Verificar deploy en Vercel — variables de entorno presentes y vigentes - TEST
-- [ ] 1.5 `npm run dev` local + smoke test del flujo completo en sandbox - TEST
-- [ ] 1.6 Re-ejecutar `node run-concurrency-test.js` para validar que la lógica anti-sobreventa sigue intacta - TEST
+- [x] 1.2 Verificar credenciales MercadoPago vigentes — token PROD vigente (verificado 2026-05-01 vía /users/me) - TEST
+- [x] 1.3 Verificar conexión a Turso — BD operativa (verificado 2026-05-01) - TEST
+- [x] 1.4 Verificar deploy productivo — Cloud Run us-east1 operativo, smoke tests verdes - TEST
+- [~] 1.5 `npm run dev` local + smoke test sandbox MP - SKIPPED por decisión usuario 2026-05-02 — hacer pre-Fase 4 con TEST credentials para validar flujo de compra real
+- [~] 1.6 Re-ejecutar `node run-concurrency-test.js` post fix BUG-008 - SKIPPED por decisión usuario 2026-05-02 — hacer pre-Fase 4, los locks optimistas de Task 3 alteran el camino crítico
 
 ### Fase 2: Configuración de la nueva rifa 2026
 - [ ] 2.1 Decidir parámetros: total de números, precio, fecha del sorteo, premios - DEV
@@ -62,6 +62,24 @@
 ---
 
 ## Bitácora
+
+### 2026-05-02 — Save #2 (cierre de sesión consolidado)
+- **Tareas completadas**: 1.1 (npm audit), 1.2 (credenciales MP), 1.3 (conexión Turso), 1.4 (deploy productivo en Cloud Run)
+- **En progreso / SKIPPED**: 1.5 y 1.6 saltadas conscientemente por el usuario para arrancar Fase 2 directo en próxima sesión. Ambas cubiertas funcionalmente por la 4.2 (smoke E2E con compra de prueba).
+- **Bugs cerrados**: BUG-007 (Vercel pause → resuelto vía migración Cloud Run), BUG-008 (webhook acepta firmas inválidas → resuelto con 7 sub-bugs identificados y corregidos)
+- **Próxima tarea**: 2.1 — Decidir parámetros rifa 2026 (total números, precio, fecha sorteo, premios). Plan completo de Fases 2→4 documentado al final de este archivo.
+- **Archivos modificados** (entre los principales):
+  - Código nuevo: `lib/webhook-verification.ts`, `tests/webhook-verification.test.mjs`, `tests/run-tests.sh`, `Dockerfile`, `.dockerignore`, `scripts/deploy.sh`, `public/.gitkeep`
+  - Código modificado: `app/api/webhooks/mercadopago/route.ts`, `lib/services/raffleService.ts`, `next.config.js`, `package.json`, `package-lock.json`
+  - Meta: `CLAUDE.md`, `MEMORIA.md`, `ESTADO.md`, `BUGS.md`, `LEARNINGS.md`
+  - Config: `.claude/commands/deploy.md` (renombrado desde deploy-vercel.md), `.claude/hooks/pre-commit-gate.sh`
+  - Docs: `docs/superpowers/specs/2026-05-02-migracion-cloud-run-design.md`, `docs/superpowers/plans/2026-05-02-migracion-cloud-run.md`, `docs/superpowers/plans/2026-05-02-fix-bug-008-webhook-mp.md`
+- **Notas**:
+  - Sesión muy larga (~5h efectivas): brainstorming + writing-plans + subagent-driven-development × 2 ciclos completos (migración + fix BUG-008).
+  - Cualquier cambio futuro al flujo de pago o concurrencia REQUIERE re-test (`node run-concurrency-test.js`) y smoke E2E sandbox MP — convención reforzada por las skipped 1.5/1.6.
+  - `MERCADO_PAGO_WEBHOOK_SECRET` fue expuesto en chat durante diagnóstico Task 4 BUG-008. Acción crítica pre-Fase 4: regenerarlo.
+  - Cron scheduler externo para `/api/cron/cleanup` quedó pendiente — en Vercel había auto, en Cloud Run hay que configurar Cloud Scheduler.
+- **Stats sesión**: 18 commits desde el inicio, 7 sub-bugs documentados, 15 tests unitarios + 4 tests E2E pasando, 0 cargo en GCP (100% Free Tier).
 
 ### 2026-05-02 — BUG-008 cerrado al 100% (webhook MercadoPago seguro para Fase 4)
 - **Resumen**: Fix completo de BUG-008 + 6 sub-bugs encadenados (008-A a 008-F) identificados por `diagnosis-specialist`, más BUG-008-G descubierto durante E2E (ts en ms). Webhook ahora valida firmas legítimas, rechaza bypasses, es idempotente y maneja correctamente la política de retries de MP.
@@ -160,4 +178,27 @@
 
 ## Próxima tarea
 
-**1.5** — `npm run dev` local + smoke test del flujo completo en sandbox MP, validando que la integración Cloud Run + Turso + MP no tiene regresiones, ahora con webhook seguro post-BUG-008. Antes de Fase 4: regenerar MERCADO_PAGO_WEBHOOK_SECRET (fue expuesto en chat).
+**2.1** — Decidir parámetros de la rifa 2026 (total de números, precio, fecha del sorteo, premios). El usuario confirmó 2026-05-02 que la próxima sesión arranca directo en Fase 2 y avanza hasta Fase 4 saltando 1.5 y 1.6.
+
+### Plan de la próxima sesión (Fases 2 → 4 al hilo)
+
+> Las tareas 1.5 (smoke sandbox MP) y 1.6 (concurrency tests post-fix BUG-008) quedan SKIPPED conscientemente — recomendado hacerlas como gate antes del lanzamiento real (Fase 4.2 Smoke E2E con compra de prueba ya cumple ese rol con monto bajo).
+
+**Fase 2 — Configuración de la nueva rifa 2026**:
+1. **2.1**: definir parámetros con el usuario (total de números, precio, fecha sorteo, premios). Decisión de diseño a documentar en MEMORIA.md.
+2. **2.2**: reset de la BD productiva — borrar `purchases`, `purchase_numbers`, `event_logs` de la rifa 2025. Mantener tabla `raffles` y `raffle_numbers` solo para reescribirlas en 2.3-2.4. Hacer backup previo (export a JSON local).
+3. **2.3**: insert nuevo registro en `raffles` con la config decidida en 2.1.
+4. **2.4**: re-poblar `raffle_numbers` (todos en `available`) según `totalNumbers`. Pasar por `db-migration-reviewer` antes de ejecutar.
+5. **2.5**: smoke test UI — abrir https://sistema-ventas-rifas-kc5dasqukq-ue.a.run.app/ y verificar que la grilla muestra los números nuevos en verde.
+
+**Pre-requisito antes de Fase 4 (acción de seguridad)**:
+- **Regenerar `MERCADO_PAGO_WEBHOOK_SECRET`** porque fue expuesto en chat durante diagnóstico BUG-008. MP dashboard → "Generar nueva clave secreta" → `gcloud secrets versions add mp-webhook-secret --data-file=-` → `./scripts/deploy.sh`.
+- **Configurar Cloud Scheduler** para invocar `/api/cron/cleanup` cada 5 min (Vercel cron auto se perdió en la migración a Cloud Run).
+
+**Fase 4 — Lanzamiento**:
+1. **4.1**: deploy a producción con configuración 2026 (probablemente solo redeploy, ya estamos en prod).
+2. **4.2**: smoke test E2E con compra real de prueba (1 número, monto bajo) — esta tarea cumple también como validación 1.5 + 1.6.
+3. **4.3**: anuncio del lanzamiento al colegio.
+4. **4.4**: monitoreo activo primeras 24h (logs Cloud Run, eventLogs Turso, MP dashboard).
+
+**Tarea Fase 3** (postergable post-lanzamiento): autenticación admin (3.1), email post-compra (3.2), exportes admin (3.3-3.5), backup BD (3.6).

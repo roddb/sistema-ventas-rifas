@@ -2,8 +2,8 @@
 
 ## Proyecto: Sistema de Ventas de Rifas Escolares
 ## Repositorio: https://github.com/roddb/sistema-ventas-rifas
-## Producción: https://sistema-ventas-rifas.vercel.app
-## Último save: 2026-05-01 — Save #1 (cierre Fase 0 + verificación técnica post-pausa)
+## Producción: https://sistema-ventas-rifas-kc5dasqukq-ue.a.run.app (Cloud Run, us-east1)
+## Último save: 2026-05-02 — Save #2 (cierre Fase 1 + migración Cloud Run + fix BUG-008)
 
 ---
 
