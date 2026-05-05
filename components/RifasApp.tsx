@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import PageContainer from './layout/PageContainer';
 import HeroLanding from './hero/HeroLanding';
+import NumberGrid from './grid/NumberGrid';
 
 // === Types ===
 
@@ -235,7 +236,17 @@ export default function RifasApp() {
           onStart={goToGrid}
         />
       )}
-      {currentStep === 'grid' && <div>Grid placeholder</div>}
+      {currentStep === 'grid' && (
+        <NumberGrid
+          numbers={numbers}
+          totalNumbers={raffleConfig.totalNumbers}
+          selectedNumber={selectedNumber}
+          pricePerNumber={raffleConfig.pricePerNumber}
+          onSelect={setSelectedNumber}
+          onContinue={goToForm}
+          onBack={goBack}
+        />
+      )}
       {currentStep === 'form' && <div>Form placeholder</div>}
       {currentStep === 'review' && <div>Review placeholder</div>}
       {currentStep === 'success' && <div>Success placeholder</div>}
