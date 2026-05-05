@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
   });
 
   // Redirigir al frontend con el estado de éxito
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://sistema-ventas-rifas.vercel.app';
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://sistema-ventas-rifas-kc5dasqukq-ue.a.run.app';
   const redirectUrl = new URL(baseUrl);
   redirectUrl.searchParams.set('payment', 'success');
   redirectUrl.searchParams.set('purchase', externalReference || '');

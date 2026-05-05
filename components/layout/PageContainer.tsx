@@ -7,7 +7,7 @@ interface PageContainerProps {
 
 export default function PageContainer({ children, className = '' }: PageContainerProps) {
   return (
-    <div className={`mx-auto w-full max-w-[560px] min-h-screen flex flex-col ${className}`}>
+    <div className={`mx-auto w-full max-w-[560px] min-h-dvh flex flex-col ${className}`}>
       {children}
     </div>
   );

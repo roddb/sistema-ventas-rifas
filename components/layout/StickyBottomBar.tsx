@@ -10,13 +10,7 @@ interface StickyBottomBarProps {
 export default function StickyBottomBar({ children, withBorder = true, className = '' }: StickyBottomBarProps) {
   return (
     <div
-      className={`
-        sticky bottom-0 z-20
-        bg-surface-raised
-        ${withBorder ? 'border-t border-line' : ''}
-        px-4 py-3
-        ${className}
-      `}
+      className={`sticky bottom-0 z-20 bg-surface-raised ${withBorder ? 'border-t border-line' : ''} px-4 py-3 ${className}`}
     >
       {children}
     </div>
