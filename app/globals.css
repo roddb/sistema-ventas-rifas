@@ -2,90 +2,53 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 214, 219, 220;
-  --background-end-rgb: 255, 255, 255;
+/* Reset adicional sobre el de Tailwind preflight */
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --foreground-rgb: 255, 255, 255;
-    --background-start-rgb: 0, 0, 0;
-    --background-end-rgb: 0, 0, 0;
-  }
-}
-
-body {
-  color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
-}
-
-/* Custom scrollbar */
+/* Scrollbar custom (mobile y desktop) */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
-
 ::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 10px;
+  background: #f1f5f9;
 }
-
 ::-webkit-scrollbar-thumb {
-  background: #888;
-  border-radius: 10px;
+  background: #cbd5e1;
+  border-radius: 8px;
 }
-
 ::-webkit-scrollbar-thumb:hover {
-  background: #555;
+  background: #94a3b8;
 }
 
-/* Animaciones personalizadas */
+/* Animación fade-in para transiciones de step en el wizard */
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
     transform: translateY(0);
   }
 }
-
 .animate-fadeIn {
-  animation: fadeIn 0.3s ease-out;
+  animation: fadeIn 0.25s ease-out;
 }
 
-/* Estilos para el grid de números */
-.number-grid {
-  display: grid;
-  gap: 2px;
-  grid-template-columns: repeat(auto-fit, minmax(28px, 1fr));
-}
-
-/* Transiciones suaves */
-* {
-  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  transition-duration: 150ms;
-}
-
-/* Loading spinner */
+/* Spinner legacy preservado por si algún componente lo sigue usando hasta Fase 5.B */
 .spinner {
-  border: 3px solid rgba(0, 0, 0, 0.1);
+  border: 3px solid rgba(15, 28, 61, 0.1);
   border-radius: 50%;
-  border-top: 3px solid #3b82f6;
+  border-top: 3px solid #1E3A8A;
   width: 40px;
   height: 40px;
   animation: spin 1s linear infinite;
 }
-
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
