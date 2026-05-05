@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
   });
 
   // Redirigir al frontend con el estado pendiente
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://sistema-ventas-rifas.vercel.app';
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://sistema-ventas-rifas-kc5dasqukq-ue.a.run.app';
   const redirectUrl = new URL(baseUrl);
   redirectUrl.searchParams.set('payment', 'pending');
   redirectUrl.searchParams.set('purchase', externalReference || '');

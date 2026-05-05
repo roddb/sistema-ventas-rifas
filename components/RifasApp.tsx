@@ -6,6 +6,9 @@ import HeroLanding from './hero/HeroLanding';
 import NumberGrid from './grid/NumberGrid';
 import BuyerForm from './form/BuyerForm';
 import PurchaseReview from './review/PurchaseReview';
+import SuccessScreen from './status/SuccessScreen';
+import FailureScreen from './status/FailureScreen';
+import PendingScreen from './status/PendingScreen';
 
 // === Types ===
 
@@ -215,6 +218,12 @@ export default function RifasApp() {
     loadNumbers();
   }, [loadNumbers]);
 
+  const shareWhatsApp = useCallback(() => {
+    if (!selectedNumber || !raffleConfig) return;
+    const text = `¡Tengo el número ${String(selectedNumber).padStart(4, '0')} en ${raffleConfig.title}! 🎟`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+  }, [selectedNumber, raffleConfig]);
+
   // === Render ===
 
   if (!raffleConfig) {
@@ -272,9 +281,19 @@ export default function RifasApp() {
           onBack={goBack}
         />
       )}
-      {currentStep === 'success' && <div>Success placeholder</div>}
-      {currentStep === 'failure' && <div>Failure placeholder</div>}
-      {currentStep === 'pending' && <div>Pending placeholder</div>}
+      {currentStep === 'success' && (
+        <SuccessScreen
+          number={selectedNumber ?? undefined}
+          email={formData.email}
+          raffleTitle={raffleConfig.title}
+          onShareWhatsApp={shareWhatsApp}
+          onRestart={restart}
+        />
+      )}
+      {currentStep === 'failure' && (
+        <FailureScreen number={selectedNumber} onRestart={restart} />
+      )}
+      {currentStep === 'pending' && <PendingScreen onRestart={restart} />}
     </PageContainer>
   );
 }
