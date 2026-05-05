@@ -5,6 +5,7 @@ import PageContainer from './layout/PageContainer';
 import HeroLanding from './hero/HeroLanding';
 import NumberGrid from './grid/NumberGrid';
 import BuyerForm from './form/BuyerForm';
+import PurchaseReview from './review/PurchaseReview';
 
 // === Types ===
 
@@ -260,7 +261,17 @@ export default function RifasApp() {
     onBack={goBack}
   />
 )}
-      {currentStep === 'review' && <div>Review placeholder</div>}
+      {currentStep === 'review' && selectedNumber !== null && (
+        <PurchaseReview
+          selectedNumber={selectedNumber}
+          pricePerNumber={raffleConfig.pricePerNumber}
+          formData={formData}
+          isPaying={isLoading}
+          errorMessage={error}
+          onPay={startPayment}
+          onBack={goBack}
+        />
+      )}
       {currentStep === 'success' && <div>Success placeholder</div>}
       {currentStep === 'failure' && <div>Failure placeholder</div>}
       {currentStep === 'pending' && <div>Pending placeholder</div>}
