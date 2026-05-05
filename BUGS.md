@@ -2,13 +2,13 @@
 
 ## Proyecto: Sistema de Ventas de Rifas Escolares
 ## Iniciado: 2025-09-11
-## Última actualización: 2026-05-04
+## Última actualización: 2026-05-05
 
 ---
 
 ## Resumen
-- **Total bugs registrados**: 9
-- **Resueltos**: 9
+- **Total bugs registrados**: 10
+- **Resueltos**: 10
 - **Pendientes**: 0
 
 > Histórico migrado desde `old_docs/Historial.md` (sesión inaugural 2025-09-11). A partir de la reactivación 2026-05-01, los nuevos bugs se numeran BUG-006+.
@@ -159,6 +159,23 @@
 - **Validación**: `npm run lint` pasa (warning del effect 629 desapareció), `npm run build` verde, deploy revision `00008-bg2`, smoke UI confirma grilla renderizando 2.000 números.
 - **Archivos afectados**: `components/RifasApp.tsx` (2 cambios: split del useEffect; cambio simultáneo de `VENTAS_CERRADAS` y title hardcoded en la misma sesión, no atribuibles a este bug pero deployados juntos).
 - **Deuda técnica residual**: `VENTAS_CERRADAS` sigue siendo constante hardcoded a nivel módulo. Lo correcto sería derivarlo de `raffleConfig.isActive` (la BD ya tiene `is_active=true` para la rifa 2026, y `is_active=false` cerraría las ventas sin redeploy). Pendiente para una próxima iteración.
+
+---
+
+### BUG-010 | RESUELTO
+- **Fecha detectado**: 2026-05-04 (compra real de Romina Ruiz de Albornoz, 2do intento productivo tras Fase 4.1)
+- **Fecha resuelto**: 2026-05-04
+- **Descripción**: Compradores reales recibían "Algo salió mal · Código CPT01-…" al hacer click en "Pagar" en MercadoPago. CPT01 es el código de error genérico de Checkout Pro de MP. Reproducible en cada intento, con distintos buyers y distintos métodos de pago.
+- **Contexto**: Romi (segunda buyer real, tras intento bloqueado de Rodrigo por seller=buyer) intentó pagar dos veces con dinero disponible y recibió CPT01 ambas. Tres purchases creadas en BD quedaron en `pending` con números 1 y 2 reservados en limbo. Pre-Fase 4.3 (anuncio).
+- **Error/Síntoma**: en MP UI: "Algo salió mal · Código CPT01-{random}". En BD: purchases creadas con `mercado_pago_preference_id` poblado pero sin webhook de pago. Cloud Run logs: `/api/preference` devolvía 200 + `init_point` correcto, pero MP rechazaba al iniciar el cobro.
+- **Causa raíz**: `next.config.js` tenía bloque `env: { NEXT_PUBLIC_BASE_URL: process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000' }`. Ese campo `env` en next.config.js **fuerza a Next.js a inlinear el valor en build time** en TODO el bundle (incluso server code), pisando el comportamiento normal de runtime para variables `NEXT_PUBLIC_*`. El Docker `RUN npm run build` no recibe `NEXT_PUBLIC_BASE_URL` (no se setea en Dockerfile), así que cae al fallback `'http://localhost:3000'` y queda **hardcoded en el JS compilado** dentro del container. La env var de runtime en Cloud Run estaba bien seteada (`https://sistema-ventas-rifas-kc5dasqukq-ue.a.run.app`) pero el código compilado nunca la leía. Las preferences creadas en MP tenían `back_urls={success:"",failure:"",pending:""}` (MP descarta URLs localhost) y `notification_url="http://localhost:3000/api/webhooks/mercadopago"`. MP rechazaba al iniciar el cobro porque las back_urls quedaban vacías. La cuenta MP estaba 100% OK (verificado vía `GET /users/me`).
+- **Por qué los smoke tests no lo detectaron**: los 5 tests automatizados de Fase 4.2 (sin user action) sólo validaban que `/api/preference` devolviera `200 + initPoint`. NO inspeccionaban las URLs internas del preference creado. Los tests E2E del fix BUG-008 pasaban porque la simulación dashboard MP usa la URL configurada en el panel (correcta, Cloud Run), no la del payload de la preference.
+- **Cómo se diagnosticó**: con `gcloud secrets versions access latest --secret=mp-access-token` + `curl` a `/users/me` (cuenta OK) + `curl` a `/checkout/preferences/{id}` revelando las URLs vacías y localhost. De ahí se buscó qué hardcodeaba `localhost:3000` en el código → grep en repo encontró el bloque `env` en `next.config.js`.
+- **Solución aplicada**: removido el bloque `env: { NEXT_PUBLIC_BASE_URL: ... }` de `next.config.js`. Ahora `process.env.NEXT_PUBLIC_BASE_URL` se lee runtime desde la env var de Cloud Run sin inline. Validación: smoke test post-deploy con curl + MP API confirmó back_urls y notification_url con dominio Cloud Run. Compra real de Romi (`PUR-bv13rkdfQQ`, $2.000, approved) cerró la cadena end-to-end minutos después.
+- **Cleanup BD asociado**: 3 purchases pending de Romi + 1 purchase pending de Rodrigo + 1 purchase del smoke bot todas pasaron a `cancelled`; números 1 y 2 liberados a `available`; `purchase_numbers` correspondientes borradas. Todas las escrituras con guard `WHERE status='reserved' AND purchase_id=...` y `payment_status='pending'`.
+- **Archivos afectados**: `next.config.js` (bloque env removido), `lib/mercadopago.ts` (cambio bonus de título 2025→2026 que se hizo en el mismo deploy).
+- **Deploys**: revision `sistema-ventas-rifas-00011-jdr` (fix título) y `sistema-ventas-rifas-00012-xrl` (fix BUG-010).
+- **Aprendizaje promovido**: en CLAUDE.md / LEARNINGS — el bloque `env` en `next.config.js` debe evitarse para variables que pueden ser undefined en build time porque su fallback queda hardcoded forever. Para variables server-only que dependen del entorno (URLs, secrets), no usar prefijo `NEXT_PUBLIC_` y no incluir en bloque `env`. Y siempre que se valide un flujo de pago, inspeccionar la preference creada vía MP API, no sólo confirmar que el endpoint devolvió 200.
 
 ---
 

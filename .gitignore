@@ -57,3 +57,6 @@ numeros_disponibles_venta.txt
 
 # Backups de BD productiva (contienen PII completa — NUNCA versionar)
 backups/
+
+# Brainstorming visual companion (mockups efímeros)
+.superpowers/

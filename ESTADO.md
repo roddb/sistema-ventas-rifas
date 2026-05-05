@@ -47,21 +47,88 @@
 > Items pendientes detectados en Historial.md sesión 2 + ideas nuevas. Re-priorizar antes de Fase 3.
 
 - [ ] 3.1 Autenticación para panel admin (actualmente oculto pero accesible) - DEV
-- [ ] 3.2 Notificaciones por email post-compra exitosa (Nodemailer ya está en deps) - DEV
+- [x] ~~3.2 Notificaciones por email post-compra exitosa~~ **DESCARTADO 2026-05-04** por decisión del usuario. Razón: el comprobante de MercadoPago ya incluye el detalle de los números comprados en el `title` del item (formato `"Rifa Escolar 2026 - Números: X, Y, Z"`), enviado al comprador automáticamente por MP. Nodemailer queda en `package.json` sin uso runtime; se podría desinstalar en una limpieza posterior.
 - [ ] 3.3 Exportación de datos a Excel/CSV desde admin - DEV
 - [ ] 3.4 Dashboard de estadísticas en tiempo real (ventas por día, top compradores) - DEV
 - [ ] 3.5 Búsqueda de números por comprador (email/DNI) - DEV
 - [ ] 3.6 Backup automático programado de la BD - DEV
 
 ### Fase 4: Lanzamiento
-- [ ] 4.1 Deploy a producción con configuración 2026 - DEV
-- [ ] 4.2 Smoke test E2E con compra real de prueba (1 número, monto bajo) - TEST
+- [x] 4.1 Deploy a producción con configuración 2026 — revision `00010-jlz` con fixes de notification_url + back_urls + auto_return - DEV
+- [x] 4.2 Smoke test E2E completo: compra real de Romi (`PUR-bv13rkdfQQ`, $2.000) tras fix BUG-010 cerró la cadena end-to-end (preference → MP → webhook firmado → BD `sold`) el 2026-05-04 15:54:12 - TEST
 - [ ] 4.3 Anuncio del lanzamiento al colegio - DEV
 - [ ] 4.4 Monitoreo activo primeras 24h post-lanzamiento - TEST
+
+### Fase 5: Rediseño UI completo (2026-05-04)
+> Spec aprobado: `docs/superpowers/specs/2026-05-04-rediseno-ui-completo-design.md`. Reemplaza el monolito `RifasApp.tsx` (1.587 líneas) por una arquitectura de componentes modular con sistema de design tokens, paleta institucional STA y panel admin con basic auth. Absorbe Fase 3.1 (auth admin) y parcialmente 3.3 (export CSV). Pre-requisitos: BUG-010 ya cerrado (env inline `localhost:3000`).
+- [x] 5.0 Brainstorming + spec aprobado (2026-05-04) - DEV
+- [ ] 5.A Fundamentos: tailwind tokens + componentes layout (AppHeader, StickyBottomBar, PageContainer) - DEV
+- [ ] 5.B Pantallas públicas (Hero + Grid paginada + Form + Review + Success/Failure/Pending) - DEV
+- [ ] 5.C Panel admin con basic auth + 3 tabs + export CSV - DEV
+- [ ] 5.D Validación: smoke iPhone Safari + Android Chrome + desktop Chrome + concurrency test + deploy + compra real - TEST
+- [ ] 5.E Logo STA y hex institucionales reales aplicados (cuando los pase el usuario) - DEV
 
 ---
 
 ## Bitácora
+
+### 2026-05-05 — Save #4 (fix BUG-010 + cierre Fase 4.2 con compra real + brainstorm Fase 5)
+- **Tareas completadas**: 4.2 (cerrada al 100% con compra real de Romi tras fix BUG-010) · 5.0 brainstorming + spec rediseño UI aprobado
+- **Bugs cerrados**: BUG-010 (Next.js inline de NEXT_PUBLIC_BASE_URL hardcodeaba `http://localhost:3000` en bundle compilado vía `env` block en `next.config.js`)
+- **Próxima tarea**: comenzar Fase 5.A (sistema de design tokens + componentes layout) usando `superpowers:writing-plans` para armar plan ejecutable. Pendientes pre-implementación: logo STA + hex institucionales reales (los pasa el usuario).
+- **Acciones principales**:
+  - **Bug urgente — BUG-010 detectado por compradora real**: Romi recibió 2 errores `CPT01` consecutivos al pagar ($2.000 con dinero disponible). Diagnóstico vía `gcloud secrets versions access` + `curl` a `/users/me` y `/checkout/preferences/{id}` reveló que las preferences tenían `back_urls={success:"",failure:"",pending:""}` y `notification_url="http://localhost:3000/api/webhooks/mercadopago"`. La cuenta MP estaba OK (sell.allow=true).
+  - **Causa raíz**: `next.config.js` tenía bloque `env: { NEXT_PUBLIC_BASE_URL: process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000' }` que **fuerza el inline en build time** incluso en server code. El Docker `RUN npm run build` no setea NEXT_PUBLIC_BASE_URL, así que cae al fallback `localhost:3000` y queda hardcoded en el JS compilado. La env var de runtime en Cloud Run nunca se leía.
+  - **Fix**: removido el bloque `env` de `next.config.js`. Ahora `process.env.NEXT_PUBLIC_BASE_URL` se lee runtime del entorno Cloud Run (que estaba seteado correctamente).
+  - **Cleanup paralelo de BD**: cancelladas 3 purchases pending de Romi + liberados números 1 y 2 + DELETE en purchase_numbers (todo con guards `WHERE status='reserved' AND purchase_id=...` y `payment_status='pending'`).
+  - **Bonus fix**: título item MP corregido `"Rifa Escolar 2025"` → `"Rifa Escolar 2026"` en `lib/mercadopago.ts:44` (era hardcodeo de la rifa anterior).
+  - **Validación post-deploy** (`sistema-ventas-rifas-00012-xrl`): smoke test inspeccionando preference vía MP API confirmó back_urls y notification_url con dominio Cloud Run. Compra real de Romi confirmó la cadena completa minutos después.
+  - **Brainstorm rediseño UI completo (Fase 5)**: 4 sesiones de Q&A con visual companion (mockups en localhost). Decisiones cerradas: estilo "Moderno confiado" (Inter + bloques sólidos), paleta azul royal #1E3A8A + blanco #FAFBFD + ámbar #F59E0B, grilla paginada por centenas (B), 1 número por compra, panel admin in-scope con basic auth (absorbe Fase 3.1), 3 campos del estudiante, mobile-first single column.
+  - **Spec escrito**: `docs/superpowers/specs/2026-05-04-rediseno-ui-completo-design.md` (492 líneas) cubre 7 pantallas + admin + tokens + estructura de componentes (~15 archivos chicos vs monolito de 1.587 líneas) + estrategia de migración (swap completo) + cronograma 6-9 sesiones.
+  - **Fase 5 sumada a ESTADO.md** con 5 sub-tareas (5.0 a 5.E).
+- **Archivos modificados**:
+  - Código productivo: `lib/mercadopago.ts` (título 2026), `next.config.js` (sin bloque env)
+  - Spec nuevo: `docs/superpowers/specs/2026-05-04-rediseno-ui-completo-design.md`
+  - Config: `.gitignore` (patrón `.superpowers/` para mockups del visual companion)
+  - Meta: `ESTADO.md`, `MEMORIA.md`, `BUGS.md`, `LEARNINGS.md`
+- **Notas críticas**:
+  - **Smoke tests automatizados de preference fueron insuficientes** para detectar BUG-010: validaron que `/api/preference` devuelve `200 + initPoint`, no inspeccionaron las URLs internas del preference creado (back_urls, notification_url). El bug se descubrió en compra real de un tercero. Patrón a replicar a futuro: en cualquier smoke E2E de pago, hacer `curl -H "Authorization: Bearer $MP_TOKEN" https://api.mercadopago.com/checkout/preferences/{id}` y validar URLs.
+  - **2 deploys exitosos**: `00011-jdr` (fix título) y `00012-xrl` (fix BUG-010). Cero costos extra GCP.
+  - **Fase 3.1 (auth admin)** absorbida en spec Fase 5 (admin con basic auth + tabs). Fase 3.3 (export CSV) parcialmente absorbida en el mismo. Fase 3.2 (email post-compra) sigue descartada.
+  - El rediseño NO toca pago/concurrencia → no requiere `concurrency-validator` ni re-test inicial; el gate del concurrency test sigue siendo Fase 5.D (pre-deploy).
+- **Stats sesión**: ~3h, 1 bug crítico cerrado en producción con compra real, 1 spec mayor escrito, 5 tareas completadas (4.2, 5.0, fixes), 2 deploys, 0 cargo extra GCP.
+
+### 2026-05-04 — Smoke 4.2 parcial + descubrimiento de bug latente notification_url
+- **Resumen**: Primera tentativa de compra real productiva falló con 500 en `/api/preference`. Diagnóstico revela 3 bugs en `lib/mercadopago.ts`: (1) `auto_return: 'approved'` rechazado por MP SDK v2.0.15 con error `back_url.success must be defined` aunque las URLs estaban presentes, (2) fallbacks de `back_urls` apuntaban a `https://sistema-ventas-rifas.vercel.app` (URL muerta desde migración Cloud Run 2026-05-02), (3) **bug crítico latente**: `notification_url` HARDCODED a `https://sistema-ventas-rifas.vercel.app/api/webhooks/mercadopago` — si MP usaba esa URL del payload, los webhooks de compras reales nunca habrían llegado a Cloud Run. Los tests E2E del fix BUG-008 pasaban porque la simulación dashboard MP usa la URL del panel (Cloud Run correcta), no la del payload.
+- **Acciones**:
+  - Fix 3-en-1 a `lib/mercadopago.ts`: removido `auto_return`, fallbacks y `notification_url` ahora derivan de `process.env.NEXT_PUBLIC_BASE_URL` con fallback a Cloud Run real.
+  - Build verde + deploy → revision `sistema-ventas-rifas-00010-jlz`.
+  - Cleanup BD: número 1 (id=2001) liberado, purchase `PUR-vPL-ObAmBB` cancelada vía 3 queries Turso MCP.
+  - Smoke parcial automatizado (5 tests, sin user action):
+    - **T1**: POST /api/purchase con bot data → 200 OK (`PUR-qaY-8MNqKH`, número 2 reservado).
+    - **T2**: POST /api/preference con `purchaseId` → **200 + initPoint + sandboxInitPoint** (fix auto_return confirmado, access token productivo vigente).
+    - **T3**: Cleanup BD post-T2.
+    - **T4**: Webhook firma inválida → **401** (no regresión BUG-008-D).
+    - **T5**: Webhook firma HMAC válida (manifest `id:<id>;request-id:<rid>;ts:<ms>;`, secret de Secret Manager, ts en ms) + paymentId ficticio `999999999` → **503 "Transient processing error"** (handler verifica firma OK, llama MP API, MP responde 404 al getPaymentInfo, propaga 503 → habilita retry policy MP). **Confirma fixes BUG-008-A/B/C/F/G en Cloud Run**.
+- **Lo NO probado** (requiere acción externa): webhook con firma válida + paymentId REAL → BD pasa a `sold`. Para cubrirlo: (a) `claude mcp add` del MP MCP Server + tool `simulate_webhook` con payment_id real de TEST; o (b) compra real $2.000.
+- **Decisión paralela del usuario**: SKIPPED rotación `MERCADO_PAGO_WEBHOOK_SECRET` (riesgo residual documentado anteriormente). Confirma URL webhook en panel MP (modo productivo): `https://sistema-ventas-rifas-kc5dasqukq-ue.a.run.app/api/webhooks/mercadopago` ✓.
+- **Próximo**: completar 4.2 con MCP MP o compra real. Después 4.3 (anuncio) y 4.4 (monitoreo). Considerar promover Fase 3.2 (email post-compra Nodemailer) a pre-anuncio para que comprador tenga registro independiente de los números asignados.
+- **Archivos modificados**: `lib/mercadopago.ts` (-7 líneas auto_return; URLs derivadas de env), `ESTADO.md`, `MEMORIA.md`, `LEARNINGS.md`.
+
+### 2026-05-04 — Cloud Scheduler para `/api/cron/cleanup` (gate 2 pre-Fase 4)
+- **Resumen**: Configurado job de Cloud Scheduler `rifa-cleanup` (us-east1, TZ Buenos Aires, `*/5 * * * *`) para invocar `POST /api/cron/cleanup` con Bearer token. Reemplaza el auto-cron de Vercel perdido en la migración.
+- **Acciones**:
+  - Auditoría del endpoint: el handler ya soportaba `CRON_SECRET` opcional vía `Authorization: Bearer ...`, pero la env var no estaba seteada en Cloud Run → endpoint abierto a internet.
+  - `gcloud services enable cloudscheduler.googleapis.com` (no estaba habilitada).
+  - `openssl rand -hex 32 | gcloud secrets create cron-secret` (sin imprimir el valor en stdout).
+  - IAM bind `secretAccessor` al SA de Cloud Run (`63979708570-compute@developer.gserviceaccount.com`).
+  - `gcloud run services update --update-secrets=CRON_SECRET=cron-secret:latest` → revision `00009-mvp`.
+  - Smoke test endpoint: sin auth → 401, auth correcta → 200, auth incorrecta → 401.
+  - `gcloud scheduler jobs create http rifa-cleanup` con headers Bearer + attempt-deadline 60s.
+  - Run manual + log Cloud Run muestra `Cleanup completed: { releasedNumbers: 0, cancelledPurchases: 0 }`.
+- **Decisión paralela**: gate 1 (regenerar `MERCADO_PAGO_WEBHOOK_SECRET`) marcado SKIPPED por decisión del usuario; riesgo residual documentado en sección "Próxima tarea".
+- **Próxima tarea**: Fase 4.1 — deploy con configuración 2026 (ya en prod, posiblemente solo confirmar revision actual). Después 4.2 smoke E2E con compra real de 1 número.
+- **Archivos modificados**: ESTADO.md, MEMORIA.md, LEARNINGS.md. Sin cambios de código (CRON_SECRET es runtime config).
 
 ### 2026-05-04 — Save #3 (cierre de Fase 2 + fix BUG-009)
 - **Tareas completadas**: 2.1 a 2.5 — Fase 2 al 100%
@@ -202,11 +269,24 @@
 
 ---
 
-## Próxima tarea
+## Próxima tarea (post-restart Claude Code 2026-05-04 13:38)
+
+**MCP MP conectado y autenticado** (OAuth completado en sesión 2026-05-04 tarde con access token TEST `APP_USR-5838101724285181-...`). Requiere restart de Claude Code para que las tools `mcp__mercadopago__*` queden registradas.
+
+**Acción inmediata al retomar**:
+1. Verificar inventario de tools: deberían aparecer `mcp__mercadopago__simulate_webhook`, `mcp__mercadopago__notifications_history_diagnostics`, `mcp__mercadopago__create_test_user`, etc.
+2. Cerrar 4.2 al 100% con `simulate_webhook` contra Cloud Run revision `00010-jlz` usando un payment_id real de TEST. Esto valida la cadena: firma HMAC + manifest oficial + handler verifica + llama MP API + MP responde con datos reales del payment de TEST + handler actualiza BD a `sold`.
+3. Pre-paso del smoke: crear una purchase fake en BD (POST /api/purchase con datos bot, número 3 por ejemplo) para tener un `purchaseId` que el `external_reference` del payment apunte a algo real. El payment de TEST tiene un `external_reference` configurable.
+4. Limpiar BD post-test (3 queries Turso MCP: DELETE purchase_numbers, UPDATE raffle_numbers a available, UPDATE purchases a cancelled) o mantener la compra "completada" como prueba de éxito (decisión del usuario).
+5. Tras 4.2 al 100%: pasar a 4.3 (anuncio) y 4.4 (monitoreo 24h).
+
+## Próxima tarea (legacy)
 
 **Pre-Fase 4 (gates de seguridad)** — antes del lanzamiento real:
-1. Regenerar `MERCADO_PAGO_WEBHOOK_SECRET` (fue expuesto en chat 2026-05-02). MP dashboard → Generar nueva clave → `gcloud secrets versions add mp-webhook-secret --data-file=-` → `./scripts/deploy.sh`.
-2. Configurar Cloud Scheduler para invocar `/api/cron/cleanup` cada 5 min (en Vercel había auto-cron, en Cloud Run hay que setearlo).
+1. ~~Regenerar `MERCADO_PAGO_WEBHOOK_SECRET`~~ — **SKIPPED por decisión del usuario 2026-05-04**. El secret fue expuesto en chat el 2026-05-02 durante diagnóstico BUG-008; el usuario decide no rotarlo. **Riesgo residual**: un atacante con acceso a la transcripción podría firmar webhooks falsos que el handler aceptaría como legítimos. Mitigaciones existentes: handler reconfirma vía `getPaymentInfo(paymentId)` contra MP API + filtro por `external_reference` rechaza IDs no asociados a esta cuenta. Acción de fallback documentada: `gcloud secrets versions add mp-webhook-secret --data-file=-` + redeploy si aparecen `event_logs` con `WEBHOOK_RECEIVED` no correlacionados a compras reales.
+2. ✅ **COMPLETADO 2026-05-04** — Cloud Scheduler `rifa-cleanup` (us-east1) corre cada 5 min con `*/5 * * * *` (TZ Buenos Aires). POST a `/api/cron/cleanup` con `Authorization: Bearer <CRON_SECRET>`. Endpoint protegido (sin auth → 401, auth correcta → 200, auth incorrecta → 401). Secret `cron-secret` en Secret Manager, expuesto a Cloud Run como env var `CRON_SECRET`. Validado end-to-end: run manual disparó log `Cleanup completed: { releasedNumbers: 0, cancelledPurchases: 0 }` en revision `00009-mvp`.
+
+**Próximo: Fase 4 — Lanzamiento**.
 
 **Después: Fase 4** — 4.1 (deploy con config 2026, ya en prod), 4.2 (smoke E2E con compra real de 1 número, cumple las skipped 1.5/1.6), 4.3 (anuncio), 4.4 (monitoreo 24h).
 

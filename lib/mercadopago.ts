@@ -41,7 +41,7 @@ export async function createPaymentPreference(data: CreatePreferenceData) {
     // Crear los items de la preferencia
     const items: PreferenceItem[] = [{
       id: data.purchaseId,
-      title: `Rifa Escolar 2025 - Números: ${data.numbers.join(', ')}`,
+      title: `Rifa Escolar 2026 - Números: ${data.numbers.join(', ')}`,
       quantity: 1,
       unit_price: data.totalAmount,
       currency_id: 'ARS'
@@ -55,13 +55,12 @@ export async function createPaymentPreference(data: CreatePreferenceData) {
         email: data.email
       },
       back_urls: {
-        success: `${process.env.NEXT_PUBLIC_BASE_URL || 'https://sistema-ventas-rifas.vercel.app'}/api/payment/success`,
-        failure: `${process.env.NEXT_PUBLIC_BASE_URL || 'https://sistema-ventas-rifas.vercel.app'}/api/payment/failure`,
-        pending: `${process.env.NEXT_PUBLIC_BASE_URL || 'https://sistema-ventas-rifas.vercel.app'}/api/payment/pending`
+        success: `${process.env.NEXT_PUBLIC_BASE_URL || 'https://sistema-ventas-rifas-kc5dasqukq-ue.a.run.app'}/api/payment/success`,
+        failure: `${process.env.NEXT_PUBLIC_BASE_URL || 'https://sistema-ventas-rifas-kc5dasqukq-ue.a.run.app'}/api/payment/failure`,
+        pending: `${process.env.NEXT_PUBLIC_BASE_URL || 'https://sistema-ventas-rifas-kc5dasqukq-ue.a.run.app'}/api/payment/pending`
       },
-      auto_return: 'approved' as const,
       external_reference: data.purchaseId,
-      notification_url: 'https://sistema-ventas-rifas.vercel.app/api/webhooks/mercadopago',
+      notification_url: `${process.env.NEXT_PUBLIC_BASE_URL || 'https://sistema-ventas-rifas-kc5dasqukq-ue.a.run.app'}/api/webhooks/mercadopago`,
       statement_descriptor: 'RIFA ESCOLAR',
       payment_methods: {
         excluded_payment_types: [],

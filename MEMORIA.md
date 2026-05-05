@@ -3,17 +3,27 @@
 ## Proyecto: Sistema de Ventas de Rifas Escolares
 ## Repositorio: https://github.com/roddb/sistema-ventas-rifas
 ## Producción: https://sistema-ventas-rifas-kc5dasqukq-ue.a.run.app (Cloud Run, us-east1)
-## Último save: 2026-05-04 — Save #3 (cierre Fase 2 + fix BUG-009)
+## Último save: 2026-05-05 — Save #4 (fix BUG-010 + cierre Fase 4.2 + brainstorm Fase 5)
 
 ---
 
 ## Contexto Actual
 
-Fases 0, 1 y 2 cerradas al 100%. Reactivación 2026 lista del lado de BD y UI: la BD productiva Turso `sistema-de-riffas` tiene una sola rifa activa (id=2, "Rifa Escolar 2026", 2.000 números a $2.000, sin fecha de sorteo definida, `endDate` placeholder 2026-12-31). El frontend en Cloud Run (revision `00008-bg2`) renderiza correctamente la grilla con los 2.000 números disponibles tras fix de BUG-009 (loop infinito en `useEffect` que estuvo latente 8 meses oculto detrás del flag `VENTAS_CERRADAS=true`).
+**Fases 0-4 cerradas al 100%** (la 4.2 cerró tras compra real exitosa de Romi tras fix BUG-010). Producción estable en Cloud Run revision `sistema-ventas-rifas-00012-xrl` con 1 número vendido (`sold=1`, `available=1999`, `approved=1`, `cancelled=7`, `reserved=0`). Rifa Escolar 2026 (id=2, 2.000 números a $2.000, `is_active=1`, `endDate=2026-12-31` placeholder).
 
-El estado funcional al cierre de octubre 2025 fue producción estable con la rifa "Rifa Escolar 2025" (corrigiendo dato previo de MEMORIA: la 2025 tuvo **1.500 números, no 2.000** — el default del schema). 134 compras `approved`, 1.081 números `sold`, 9 reservas que nunca se cerraron en `pending`. Todo ese estado quedó respaldado en `backups/rifa-2025-backup-2026-05-04.json` (gitignored, 830 KB) antes del reset.
+**Fase 5 abierta**: rediseño UI completo con spec aprobado (`docs/superpowers/specs/2026-05-04-rediseno-ui-completo-design.md`, 492 líneas). Decisiones clave: estilo "Moderno confiado" + Inter, paleta azul royal #1E3A8A + blanco #FAFBFD + ámbar #F59E0B, grilla paginada por centenas con tabs, 1 número por compra, panel admin in-scope con basic auth (absorbe Fase 3.1), 3 campos del estudiante mantenidos, mobile-first single column. Estructura propuesta: ~15 componentes chicos vs monolito de 1.587 líneas (`RifasApp.tsx`). Cronograma estimado 6-9 sesiones (5.A fundamentos + 5.B pantallas públicas + 5.C admin + 5.D validación + 5.E logo/hex finales). Pendientes pre-implementación: logo STA + hex institucionales reales (los pasa el usuario antes de que arranque 5.E o como ajuste de tokens en cualquier momento).
 
-Pendientes pre-Fase 4 (gates obligatorios antes del lanzamiento): (a) regenerar `MERCADO_PAGO_WEBHOOK_SECRET` que se expuso en chat 2026-05-02 durante diagnóstico BUG-008, (b) configurar Cloud Scheduler para `/api/cron/cleanup` cada 5 min (en Vercel había auto-cron, en Cloud Run hay que setearlo). Después: Fase 4 (deploy ya en prod / smoke E2E con compra real / anuncio / monitoreo). La Fase 3 (mejoras: auth admin, email post-compra, exportes, backup BD) queda postergada post-lanzamiento.
+**BUG-010 cerrado** (2026-05-04): bloque `env: { NEXT_PUBLIC_BASE_URL: ... || 'http://localhost:3000' }` en `next.config.js` forzaba a Next.js a inlinear el valor en build time en todo el bundle (incluso server code). Como el Docker build no recibe `NEXT_PUBLIC_BASE_URL`, el fallback `localhost:3000` quedaba hardcoded en el JS compilado. La env var de Cloud Run nunca se leía → preferences MP creadas con `back_urls` vacías y `notification_url` apuntando a localhost → MP rechazaba con `CPT01`. Fix: remover el bloque `env` de `next.config.js`. Validado en producción con compra real $2.000 de Romi.
+
+**Lecciones operativas pendientes de aplicar a futuro**:
+- Smoke tests automatizados de pago deben **inspeccionar las URLs internas del preference creado vía MP API** (`GET /checkout/preferences/{id}` con bearer token), no sólo confirmar que el endpoint devolvió 200. El bug se descubrió en compra real de un tercero.
+- El bloque `env` en `next.config.js` debe evitarse para variables que pueden ser `undefined` en build time. Para variables server-only, no usar prefijo `NEXT_PUBLIC_` (prefijo es para variables que SÍ se exponen al cliente).
+
+**Histórico de la rifa 2025** (referencia): cerrada en octubre 2025. 1.500 números, $2.000 c/u, 1.081 sold, 134 compras approved. Backup completo en `backups/rifa-2025-backup-2026-05-04.json` (gitignored, 830 KB) antes del reset.
+
+**Pre-Fase 4 gates resueltos**: (a) regenerar `MERCADO_PAGO_WEBHOOK_SECRET` SKIPPED por decisión del usuario; riesgo residual mitigado por reconfirmación contra MP API + filtro `external_reference`. (b) Cloud Scheduler `rifa-cleanup` (us-east1, `*/5 * * * *`) COMPLETADO con secret `cron-secret` en Secret Manager.
+
+**Fase 3 (mejoras)**: 3.1 (auth admin) absorbida en spec Fase 5. 3.2 (email post-compra) descartada. 3.3 (export CSV) parcialmente absorbida en spec Fase 5. 3.4-3.6 quedan postergadas post-lanzamiento.
 
 ## Decisiones de Diseño
 
@@ -108,6 +118,23 @@ Rifa cerrada en octubre 2025. Datos reales (extraídos de la BD el 2026-05-04 an
 ---
 
 ## Historial de Sesiones
+
+### Sesión 4 — 2026-05-04/05 (fix BUG-010 + cierre Fase 4.2 + spec Fase 5)
+- **Duración aproximada**: ~3h
+- **Resumen**: Sesión que arrancó como debug emergente de un error de pago en producción reportado por compradora real (Romi) y derivó en (a) descubrimiento + fix de BUG-010 (Next.js env inline hardcodeando localhost), (b) compra real exitosa que cerró Fase 4.2 al 100%, (c) brainstorm completo del rediseño UI con spec aprobado.
+- **Logros**:
+  - **BUG-010 detectado, diagnosticado y resuelto** en ~30 min: 2 errores `CPT01` consecutivos de Romi → diagnóstico vía `gcloud secrets versions access` + `curl` a MP API → identificación del bloque `env` en `next.config.js` que forzaba inline en build → fix removiendo el bloque → deploy `00012-xrl`.
+  - **Cleanup BD asociado** con guards anti-sobreventa: 7 purchases pending pasaron a cancelled, 2 raffle_numbers liberados a available, 3 entradas en purchase_numbers borradas. Todas las escrituras dentro de la convención `WHERE status='reserved' AND purchase_id=...` y `payment_status='pending'` con `rowsAffected` validado.
+  - **Bonus fix**: título item MP cambiado `"Rifa Escolar 2025"` → `"Rifa Escolar 2026"` en `lib/mercadopago.ts:44` (deploy `00011-jdr`).
+  - **Compra real exitosa de Romi** (PUR-bv13rkdfQQ, $2.000) cerró la cadena end-to-end del fix. Fase 4.2 marcada `[x]` definitivamente.
+  - **Brainstorm rediseño UI** (Fase 5) con `superpowers:brainstorming` skill + visual companion local: 6 rondas de Q&A con mockups HTML side-by-side. Decisiones cerradas: estilo C "Moderno confiado", paleta C azul royal/blanco/ámbar, grid B paginado, 1 número por compra, admin in-scope con basic auth, mantener 3 campos del estudiante.
+  - **Spec escrito y aprobado**: `docs/superpowers/specs/2026-05-04-rediseno-ui-completo-design.md` (492 líneas) cubre 7 pantallas + admin + tokens + estructura de componentes + estrategia de migración + cronograma 6-9 sesiones.
+  - **ESTADO.md** actualizado con Fase 5 (5.0 a 5.E).
+- **Problemas encontrados**:
+  - **BUG-010**: tipo "smoke test gap" — los 5 tests automatizados de Fase 4.2 sólo validaban que `/api/preference` devolviera `200 + initPoint`. NO inspeccionaban las URLs internas del preference creado. Detectado por usuario externo, no por el sistema de QA.
+  - **Visual companion** se cayó dos veces durante la sesión (timeout 30 min de inactividad y por shell sandboxing). Reiniciado con `--foreground` + `run_in_background:true` la segunda vez.
+  - **MP MCP server**: el usuario intentó conectarlo para usar `simulate_webhook` antes de cerrar 4.2 sin compra real. Falló con "Failed to reconnect". Decisión: pasar a compra real, que terminó siendo más eficiente (cerró el bug + cerró 4.2 simultáneamente).
+- **Estado al cerrar**: producción estable, 1 compra real `approved`, BD limpia. Fase 5 lista para arrancar el plan de implementación con `superpowers:writing-plans`. Pendiente: logo STA + hex institucionales reales del usuario.
 
 ### Sesión 3 — 2026-05-04 (cierre Fase 2 + fix BUG-009)
 - **Duración aproximada**: ~2h
