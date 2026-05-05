@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import PageContainer from './layout/PageContainer';
+import HeroLanding from './hero/HeroLanding';
 
 // === Types ===
 
@@ -225,7 +226,15 @@ export default function RifasApp() {
 
   return (
     <PageContainer>
-      {currentStep === 'hero' && <div>Hero placeholder</div>}
+      {currentStep === 'hero' && (
+        <HeroLanding
+          raffleTitle={raffleConfig.title}
+          pricePerNumber={raffleConfig.pricePerNumber}
+          totalNumbers={raffleConfig.totalNumbers}
+          availableCount={numbers.filter((n) => n.status === 'available').length}
+          onStart={goToGrid}
+        />
+      )}
       {currentStep === 'grid' && <div>Grid placeholder</div>}
       {currentStep === 'form' && <div>Form placeholder</div>}
       {currentStep === 'review' && <div>Review placeholder</div>}
