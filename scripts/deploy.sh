@@ -3,16 +3,16 @@
 # Deploy del Sistema de Ventas de Rifas a Google Cloud Run.
 # Lee .env.local para los valores NO secretos. Los secretos
 # (TURSO_AUTH_TOKEN, MERCADO_PAGO_ACCESS_TOKEN, MERCADO_PAGO_CLIENT_SECRET,
-# MERCADO_PAGO_WEBHOOK_SECRET) viven en Secret Manager.
+# MERCADO_PAGO_WEBHOOK_SECRET, CRON_SECRET) viven en Secret Manager.
 #
 # Uso: ./scripts/deploy.sh
 #
 # Prerequisitos one-time (ver docs/superpowers/specs/2026-05-02-migracion-cloud-run-design.md):
 #   - APIs habilitadas en el proyecto: run, cloudbuild, artifactregistry, secretmanager
-#   - 4 secrets creados con nombres exactos: turso-auth-token, mp-access-token,
-#     mp-client-secret, mp-webhook-secret
+#   - 5 secrets creados con nombres exactos: turso-auth-token, mp-access-token,
+#     mp-client-secret, mp-webhook-secret, cron-secret
 #   - Service account de Cloud Run (PROJECT_NUMBER-compute@developer.gserviceaccount.com)
-#     con role roles/secretmanager.secretAccessor sobre los 4 secrets
+#     con role roles/secretmanager.secretAccessor sobre los 5 secrets
 #   - Repositorio Artifact Registry "app" en us-east1
 #
 set -euo pipefail
@@ -59,7 +59,7 @@ gcloud run deploy "$SERVICE" \
   --memory=512Mi --cpu=1 --timeout=60s \
   --port=8080 \
   --set-env-vars="TURSO_DATABASE_URL=${TURSO_DATABASE_URL},MERCADO_PAGO_PUBLIC_KEY=${MERCADO_PAGO_PUBLIC_KEY},MERCADO_PAGO_CLIENT_ID=${MERCADO_PAGO_CLIENT_ID},NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL}" \
-  --set-secrets="TURSO_AUTH_TOKEN=turso-auth-token:latest,MERCADO_PAGO_ACCESS_TOKEN=mp-access-token:latest,MERCADO_PAGO_CLIENT_SECRET=mp-client-secret:latest,MERCADO_PAGO_WEBHOOK_SECRET=mp-webhook-secret:latest"
+  --set-secrets="TURSO_AUTH_TOKEN=turso-auth-token:latest,MERCADO_PAGO_ACCESS_TOKEN=mp-access-token:latest,MERCADO_PAGO_CLIENT_SECRET=mp-client-secret:latest,MERCADO_PAGO_WEBHOOK_SECRET=mp-webhook-secret:latest,CRON_SECRET=cron-secret:latest"
 
 echo ""
 echo "✅ Deploy listo. URL pública:"
