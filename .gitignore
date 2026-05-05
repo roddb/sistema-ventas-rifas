@@ -60,3 +60,6 @@ backups/
 
 # Brainstorming visual companion (mockups efímeros)
 .superpowers/
+
+# Git worktrees (workspaces aislados para feature work)
+.worktrees/
