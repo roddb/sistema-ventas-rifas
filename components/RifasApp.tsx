@@ -178,6 +178,9 @@ export default function RifasApp() {
       if (pid) setPaymentId(pid);
       setCurrentStep('pending');
     }
+    if (payment) {
+      window.history.replaceState({}, '', '/');
+    }
   }, []);
 
   // === Step actions ===
