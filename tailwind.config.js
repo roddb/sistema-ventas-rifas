@@ -51,12 +51,6 @@ module.exports = {
         'tight-2': '-0.02em',
         'tight-4': '-0.04em',
       },
-      animation: {
-        'spin-slow': 'spin 3s linear infinite',
-      },
-      backgroundImage: {
-        'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
-      },
     },
   },
   plugins: [],
