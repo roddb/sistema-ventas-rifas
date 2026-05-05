@@ -25,31 +25,3 @@ html {
   background: #94a3b8;
 }
 
-/* Animación fade-in para transiciones de step en el wizard */
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-.animate-fadeIn {
-  animation: fadeIn 0.25s ease-out;
-}
-
-/* Spinner legacy preservado por si algún componente lo sigue usando hasta Fase 5.B */
-.spinner {
-  border: 3px solid rgba(15, 28, 61, 0.1);
-  border-radius: 50%;
-  border-top: 3px solid #1E3A8A;
-  width: 40px;
-  height: 40px;
-  animation: spin 1s linear infinite;
-}
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
