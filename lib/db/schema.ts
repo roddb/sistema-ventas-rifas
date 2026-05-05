@@ -61,3 +61,30 @@ export const eventLogs = sqliteTable('event_logs', {
   data: text('data'), // JSON string
   createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`)
 });
+
+export const comboPurchases = sqliteTable('combo_purchases', {
+  id: text('id').primaryKey(),
+  buyerName: text('buyer_name').notNull(),
+  email: text('email').notNull(),
+  phone: text('phone').notNull(),
+  totalAmount: real('total_amount').notNull(),
+  itemsCount: integer('items_count').notNull(),
+  mercadoPagoPreferenceId: text('mercado_pago_preference_id'),
+  mercadoPagoPaymentId: text('mercado_pago_payment_id'),
+  paymentStatus: text('payment_status', {
+    enum: ['pending', 'approved', 'rejected', 'cancelled']
+  }).default('pending'),
+  paymentMethod: text('payment_method'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`)
+});
+
+export const comboPurchaseItems = sqliteTable('combo_purchase_items', {
+  id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }),
+  comboPurchaseId: text('combo_purchase_id').notNull().references(() => comboPurchases.id),
+  comboId: text('combo_id').notNull(),
+  comboNameSnapshot: text('combo_name_snapshot').notNull(),
+  unitPrice: real('unit_price').notNull(),
+  quantity: integer('quantity').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`)
+});
