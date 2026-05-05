@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import PageContainer from './layout/PageContainer';
 import HeroLanding from './hero/HeroLanding';
 import NumberGrid from './grid/NumberGrid';
+import BuyerForm from './form/BuyerForm';
 
 // === Types ===
 
@@ -247,7 +248,18 @@ export default function RifasApp() {
           onBack={goBack}
         />
       )}
-      {currentStep === 'form' && <div>Form placeholder</div>}
+      {currentStep === 'form' && (
+  <BuyerForm
+    initialValue={formData}
+    isSubmitting={isLoading}
+    errorMessage={error}
+    onSubmit={(data) => {
+      setFormData(data);
+      void goToReview(data);
+    }}
+    onBack={goBack}
+  />
+)}
       {currentStep === 'review' && <div>Review placeholder</div>}
       {currentStep === 'success' && <div>Success placeholder</div>}
       {currentStep === 'failure' && <div>Failure placeholder</div>}
