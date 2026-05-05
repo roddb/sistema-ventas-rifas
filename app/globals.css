@@ -25,3 +25,12 @@ html {
   background: #94a3b8;
 }
 
+/* Hide scrollbar utility para strips horizontales (RangeTabs) */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
