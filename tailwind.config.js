@@ -31,19 +31,6 @@ module.exports = {
         'state-warning-border': '#FCD34D',
         'state-warning-fg': '#78350F',
         'mp-blue': '#009EE3',
-        // === LEGACY — usado por components/RifasApp.tsx (se remueve en Fase 5.B) ===
-        primary: {
-          50: '#eff6ff',
-          100: '#dbeafe',
-          200: '#bfdbfe',
-          300: '#93c5fd',
-          400: '#60a5fa',
-          500: '#3b82f6',
-          600: '#2563eb',
-          700: '#1d4ed8',
-          800: '#1e40af',
-          900: '#1e3a8a',
-        },
       },
       borderRadius: {
         // Sistema spec §3.4
