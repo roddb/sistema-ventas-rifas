@@ -3,15 +3,46 @@
 ## Proyecto: Sistema de Ventas de Rifas Escolares
 ## Repositorio: https://github.com/roddb/sistema-ventas-rifas
 ## Producción: https://sistema-ventas-rifas-kc5dasqukq-ue.a.run.app (Cloud Run, us-east1)
-## Último save: 2026-05-05 — Save #4 (fix BUG-010 + cierre Fase 4.2 + brainstorm Fase 5)
+## Último save: 2026-05-05 — Save #5 (Fase 5.A en main + Fase 5.B en feature branch)
 
 ---
 
 ## Contexto Actual
 
-**Fases 0-4 cerradas al 100%** (la 4.2 cerró tras compra real exitosa de Romi tras fix BUG-010). Producción estable en Cloud Run revision `sistema-ventas-rifas-00012-xrl` con 1 número vendido (`sold=1`, `available=1999`, `approved=1`, `cancelled=7`, `reserved=0`). Rifa Escolar 2026 (id=2, 2.000 números a $2.000, `is_active=1`, `endDate=2026-12-31` placeholder).
+**Fases 0-4 cerradas al 100%**. Producción estable en Cloud Run revision `sistema-ventas-rifas-00012-xrl` con 1 número vendido (`sold=1`, `available=1999`, `approved=1`, `cancelled=7`, `reserved=0`). Rifa Escolar 2026 (id=2, 2.000 números a $2.000, `is_active=1`).
 
-**Fase 5 abierta**: rediseño UI completo con spec aprobado (`docs/superpowers/specs/2026-05-04-rediseno-ui-completo-design.md`, 492 líneas). Decisiones clave: estilo "Moderno confiado" + Inter, paleta azul royal #1E3A8A + blanco #FAFBFD + ámbar #F59E0B, grilla paginada por centenas con tabs, 1 número por compra, panel admin in-scope con basic auth (absorbe Fase 3.1), 3 campos del estudiante mantenidos, mobile-first single column. Estructura propuesta: ~15 componentes chicos vs monolito de 1.587 líneas (`RifasApp.tsx`). Cronograma estimado 6-9 sesiones (5.A fundamentos + 5.B pantallas públicas + 5.C admin + 5.D validación + 5.E logo/hex finales). Pendientes pre-implementación: logo STA + hex institucionales reales (los pasa el usuario antes de que arranque 5.E o como ajuste de tokens en cualquier momento).
+**Fase 5 al ~65%**:
+- **5.0 Brainstorming + spec** ✅ (`docs/superpowers/specs/2026-05-04-rediseno-ui-completo-design.md`, 492 líneas)
+- **5.A Fundamentos** ✅ (mergeada a `main`): tailwind config con 17 design tokens (brand `#1E3A8A`, ink, surface, accent ámbar `#F59E0B`, state-*), Inter font con weights 400-900 + CSS variable, 3 layout components (PageContainer max-w-560 con `min-h-dvh`, AppHeader sticky con variants hero/wizard, StickyBottomBar slot wrapper). 9 commits. Plan en `docs/superpowers/plans/2026-05-05-rediseno-ui-fase-5a-fundamentos.md`.
+- **5.B Pantallas públicas** ✅ (en feature branch `rediseno-ui/fase-5b`, **sin mergear todavía**): RifasApp 1.587 → 237 líneas slim shell + 13 componentes nuevos en `components/{hero,grid,form,review,status}/`. Bundle `/` 9.22 → 7.15 kB. 13 commits. Plan en `docs/superpowers/plans/2026-05-05-rediseno-ui-fase-5b-pantallas-publicas.md`. La app productiva Cloud Run sigue sirviendo el legacy — el rediseño llega a producción cuando 5.D haga el deploy.
+- **5.C Panel admin** pendiente (basic auth + 3 tabs + export CSV).
+- **5.D Validación + deploy** pendiente: merge feature branch → main, smoke iPhone Safari + Android Chrome real, concurrency test post-rediseño, deploy Cloud Run vía `./scripts/deploy.sh`, compra real $2.000.
+- **5.E Logo + hex institucionales** pendiente (cuando los pase el usuario).
+
+**Decisiones de diseño locked en sesión 5**:
+- Naming tokens: `brand`/`ink`/`surface-raised` (mejora semántica) en lugar del literal del spec `primary`/`text-primary`/`surface-elevated`. Spec quedó como referencia conceptual.
+- Estilo "Moderno confiado" (Inter sans, bloques sólidos, jerarquía firme).
+- Paleta C: azul royal + blanco + ámbar.
+- Grid model B: paginado por centenas (20 tabs scrolleables) con search bar arriba.
+- Multi-número: 1 por compra (UI restringe).
+- 3 campos del estudiante mantenidos (nombre + año + división).
+- Skeleton-then-meat: shell con placeholders primero, pantallas después.
+- `min-h-dvh` over `min-h-screen` (fix iPhone Safari URL bar jiggle).
+
+**Issue M-9 pendiente** detectado por final reviewer 5.B: si user hace back desde review a form y resubmit, se crea purchase zombie + 2do número reservado. Same behavior que el legacy. Decision: 5.D evalúa si vale invocar `/api/purchase/cancel` explícitamente en goBack de review.
+
+**BUG-010 cerrado** (2026-05-04): bloque `env: { NEXT_PUBLIC_BASE_URL: ... || 'http://localhost:3000' }` en `next.config.js` forzaba a Next.js a inlinear el valor en build time → preferences MP creadas con `back_urls=""` y `notification_url=localhost` → MP rechazaba con CPT01. Fix: bloque `env` removido. Validado en producción con compra real $2.000 de Romi.
+
+**Lecciones operativas pendientes de aplicar a futuro**:
+- Smoke tests automatizados de pago deben **inspeccionar las URLs internas del preference creado vía MP API** (`GET /checkout/preferences/{id}` con bearer token), no sólo confirmar que `/api/preference` devolvió 200. El bug se descubrió en compra real de un tercero.
+- El bloque `env` en `next.config.js` debe evitarse para variables que pueden ser `undefined` en build time.
+- En worktrees nested dentro del repo padre, `next lint` detecta dos `.eslintrc.json` (parent + worktree) y se queja. Fix: agregar `"root": true` al eslintrc del worktree.
+
+**Histórico de la rifa 2025** (referencia): cerrada en octubre 2025. 1.500 números, $2.000 c/u, 1.081 sold, 134 compras approved. Backup completo en `backups/rifa-2025-backup-2026-05-04.json` (gitignored, 830 KB) antes del reset.
+
+**Pre-Fase 4 gates resueltos**: (a) regenerar `MERCADO_PAGO_WEBHOOK_SECRET` SKIPPED por decisión del usuario; riesgo residual mitigado por reconfirmación contra MP API + filtro `external_reference`. (b) Cloud Scheduler `rifa-cleanup` (us-east1, `*/5 * * * *`) COMPLETADO con secret `cron-secret` en Secret Manager.
+
+**Fase 3 (mejoras)**: 3.1 (auth admin) absorbida en spec Fase 5. 3.2 (email post-compra) descartada. 3.3 (export CSV) parcialmente absorbida en spec Fase 5. 3.4-3.6 quedan postergadas post-lanzamiento.
 
 **BUG-010 cerrado** (2026-05-04): bloque `env: { NEXT_PUBLIC_BASE_URL: ... || 'http://localhost:3000' }` en `next.config.js` forzaba a Next.js a inlinear el valor en build time en todo el bundle (incluso server code). Como el Docker build no recibe `NEXT_PUBLIC_BASE_URL`, el fallback `localhost:3000` quedaba hardcoded en el JS compilado. La env var de Cloud Run nunca se leía → preferences MP creadas con `back_urls` vacías y `notification_url` apuntando a localhost → MP rechazaba con `CPT01`. Fix: remover el bloque `env` de `next.config.js`. Validado en producción con compra real $2.000 de Romi.
 
@@ -118,6 +149,24 @@ Rifa cerrada en octubre 2025. Datos reales (extraídos de la BD el 2026-05-04 an
 ---
 
 ## Historial de Sesiones
+
+### Sesión 5 — 2026-05-05 (Fase 5.A en main + Fase 5.B en feature branch)
+- **Duración aproximada**: ~5h
+- **Resumen**: Sesión larga de implementación lineal del rediseño UI. Ejecuté Fase 5.A (fundamentos) directo en main, después armé worktree y feature branch para Fase 5.B (las 5 pantallas públicas + payment routes), todo via subagent-driven development con haiku model. Se reemplazó el monolito `RifasApp.tsx` (1.587 líneas) por 13 componentes pequeños + un shell de 237 líneas. Final reviewer aprobó ambas fases; 1 issue importante de 5.B (URL params persistentes post-redirect) fixeado en mismo branch.
+- **Logros**:
+  - **Fase 5.A** (9 commits en main): tailwind con 17 design tokens, Inter weights 400-900, globals.css limpio, 3 layout components (PageContainer, AppHeader, StickyBottomBar). Build verde, lint clean. Final review aprobó con nits diferidos a 5.B (que se aplicaron en task 10 de 5.B).
+  - **Worktree setup** en `.worktrees/fase-5b` con branch `rediseno-ui/fase-5b` aislado del main. `.gitignore` actualizado con `.worktrees/`. eslintrc del worktree con `root: true` para evitar conflicto con eslint del repo padre (caso clásico de worktree nested).
+  - **Fase 5.B** (13 commits en feature branch): RifasApp slim shell + HeroLanding + (NumberCell+GridLegend+NumberSearch+RangeTabs+NumberGrid) + (FormField+StudentBlock+BuyerForm) + PurchaseReview + (SuccessScreen+FailureScreen+PendingScreen) + 3 payment route fallbacks fixeados + cleanup nits 5.A + scrollbar-hide utility + fix I-1 query params cleanup. Bundle `/` 9.22 → 7.15 kB.
+  - **Plans escritos** y commiteados a main: `docs/superpowers/plans/2026-05-05-rediseno-ui-fase-5{a,b}.md`.
+  - **Producción intacta**: Cloud Run sigue sirviendo revision `00012-xrl` con el legacy. El rediseño llega a producción en 5.D después del smoke en mobile real.
+- **Problemas encontrados**:
+  - **BUG-010 era previa sesión**, no se trabajó en esta. La sesión arrancó con BD limpia y producción estable.
+  - **Issue I-1 5.B** (final reviewer): URL params `?payment=...` se consumían pero quedaban persistentes en el URL. Fix con `window.history.replaceState({}, '', '/')` después de detectar el payment param.
+  - **Issue M-9 5.B** (final reviewer, diferido): goBack desde review crea zombie purchase + reserva 2do número. Same behavior que el legacy. Worth evaluar en 5.D si invocar `/api/purchase/cancel` en goBack del review.
+  - **eslint conflict en worktree nested**: `next lint` detecta 2 `.eslintrc.json` (padre + worktree) y se queja. Fix `root: true` en eslintrc del worktree.
+  - **scrollbar-hide no es utility default de Tailwind 3** — necesita declararse en globals.css. RangeTabs lo usaba sin haberse declarado primero; el build no fallaba (Tailwind silently drops unknown classes), pero la barra horizontal mostraba scrollbar. Fix en globals.
+  - **Naming tokens divergió del spec literal**: spec listaba `primary`/`text-primary`/`surface-elevated`, implementación usó `brand`/`ink`/`surface-raised`. Mejora semántica real (evitar colisión con keyword `border` y con palette legacy `primary.X`). Documentado en MEMORIA.
+- **Estado al cerrar**: rediseño UI al ~65% (5.0+5.A+5.B done; 5.C+5.D+5.E pendientes). Branch `rediseno-ui/fase-5b` pusheada a GitHub esperando merge en 5.D. Producción intacta. Próxima tarea: 5.D — merge + smoke mobile + concurrency + deploy + compra real.
 
 ### Sesión 4 — 2026-05-04/05 (fix BUG-010 + cierre Fase 4.2 + spec Fase 5)
 - **Duración aproximada**: ~3h

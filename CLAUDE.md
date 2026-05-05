@@ -264,6 +264,12 @@ En Vercel: las mismas variables deben estar configuradas para Production y Previ
 
 - **2026-05-04** Convención de proceso — Smoke tests automatizados de pago deben **inspeccionar las URLs internas del preference creado vía MP API** (`GET /checkout/preferences/{id}` con bearer token), no sólo confirmar que `/api/preference` devolvió `200 + initPoint`. Validar `back_urls.success/failure/pending` y `notification_url` empiezan con `https://` y matchean el dominio productivo. Sin esa verificación, un bug de config queda oculto hasta que un comprador real recibe `CPT01`. _(Origen: BUG-010 — los 5 tests automatizados de Fase 4.2 pasaron en verde mientras el bug rompía todas las compras reales)_
 
+- **2026-05-05** Herramienta — **Worktrees nested dentro del repo padre** (caso `.worktrees/<branch>`) sufren conflicto eslint: `next lint` walk-up detecta dos `.eslintrc.json` (padre + worktree) y emite "Plugin @next/next was conflicted". Fix: agregar `"root": true` al eslintrc del worktree. _(Origen: setup worktree Fase 5.B)_
+
+- **2026-05-05** Convención técnica — **Naming de tokens semánticos vs spec literal**: si los nombres del spec colisionan con keywords/utilities default de Tailwind o de la plataforma (caso `primary`/`text-primary`/`surface-elevated` vs. `border`/utilities), priorizar nombres semánticos coherentes (`brand`/`ink`/`surface-raised`). El spec queda como referencia conceptual; los nombres finales del sistema de design viven en el código. Documentar la divergencia en MEMORIA cuando ocurra. _(Origen: review naming Fase 5.A confirmado en final reviewer 5.B)_
+
+- **2026-05-05** Convención técnica — **`min-h-dvh` over `min-h-screen`** para containers root mobile-first. `100vh` en iPhone Safari incluye la barra de URL; cuando colapsa al scrollear, el viewport "saltita" 60-90px. `100dvh` (dynamic viewport height) elimina el jiggle. Tailwind 3.4+ lo soporta nativo. _(Origen: nit final reviewer Fase 5.A)_
+
 ---
 
 > Archivos de gestión: `ESTADO.md` (checklist + bitácora), `MEMORIA.md` (contexto y decisiones), `BUGS.md` (incidentes), `LEARNINGS.md` (aprendizajes técnicos), `README.md` (instalación y deploy).

@@ -59,18 +59,55 @@
 - [ ] 4.3 Anuncio del lanzamiento al colegio - DEV
 - [ ] 4.4 Monitoreo activo primeras 24h post-lanzamiento - TEST
 
-### Fase 5: Rediseño UI completo (2026-05-04)
+### Fase 5: Rediseño UI completo (2026-05-04 / 05)
 > Spec aprobado: `docs/superpowers/specs/2026-05-04-rediseno-ui-completo-design.md`. Reemplaza el monolito `RifasApp.tsx` (1.587 líneas) por una arquitectura de componentes modular con sistema de design tokens, paleta institucional STA y panel admin con basic auth. Absorbe Fase 3.1 (auth admin) y parcialmente 3.3 (export CSV). Pre-requisitos: BUG-010 ya cerrado (env inline `localhost:3000`).
 - [x] 5.0 Brainstorming + spec aprobado (2026-05-04) - DEV
-- [ ] 5.A Fundamentos: tailwind tokens + componentes layout (AppHeader, StickyBottomBar, PageContainer) - DEV
-- [ ] 5.B Pantallas públicas (Hero + Grid paginada + Form + Review + Success/Failure/Pending) - DEV
+- [x] 5.A Fundamentos: tailwind tokens + Inter font + 3 layout components (PageContainer, AppHeader, StickyBottomBar). 9 commits en main. Plan: `docs/superpowers/plans/2026-05-05-rediseno-ui-fase-5a-fundamentos.md` - DEV
+- [x] 5.B Pantallas públicas (Hero + Grid paginada + Form + Review + Success/Failure/Pending). RifasApp 1.587 → 237 líneas; 13 componentes nuevos; bundle `/` 9.22 → 7.15 kB. 13 commits en feature branch `rediseno-ui/fase-5b` (sin mergear a main todavía). Plan: `docs/superpowers/plans/2026-05-05-rediseno-ui-fase-5b-pantallas-publicas.md` - DEV
 - [ ] 5.C Panel admin con basic auth + 3 tabs + export CSV - DEV
-- [ ] 5.D Validación: smoke iPhone Safari + Android Chrome + desktop Chrome + concurrency test + deploy + compra real - TEST
+- [ ] 5.D Validación: smoke iPhone Safari + Android Chrome + desktop Chrome + concurrency test + merge feature branch + deploy + compra real - TEST
 - [ ] 5.E Logo STA y hex institucionales reales aplicados (cuando los pase el usuario) - DEV
 
 ---
 
 ## Bitácora
+
+### 2026-05-05 — Save #5 (Fase 5.A completa en main + Fase 5.B completa en feature branch)
+- **Tareas completadas**: 5.A (9 commits) + 5.B (13 commits)
+- **Bugs cerrados**: ninguno nuevo. 1 issue I-1 importante de 5.B detectado por final reviewer y fixeado en mismo branch (cleanup query params MP del URL post-redirect, commit `17aa357`).
+- **Próxima tarea**: Fase 5.D — pre-requisitos del lanzamiento real con el rediseño. Plan corto: (a) merge `rediseno-ui/fase-5b` a main, (b) smoke en iPhone Safari + Android Chrome real, (c) concurrency test post-rediseño, (d) deploy a Cloud Run vía `./scripts/deploy.sh`, (e) compra real $2.000 (la 2da después de la de Romi en 4.2). Después 5.E (logo STA + hex institucionales).
+- **Acciones principales — Fase 5.A** (9 commits en main):
+  - Reescritura de `tailwind.config.js` con 17 design tokens del spec §3.2-3.4 (brand, surface, ink, accent, state-*, mp-blue, fontFamily Inter via CSS var, borderRadius semánticos, boxShadow card, letterSpacing tight-1/-2/-4).
+  - Borrado de palette `primary.50-900` legacy (final reviewer detectó cero consumidores via grep, contradiciendo el comment "usado por RifasApp.tsx" — borrado limpio).
+  - `app/layout.tsx`: Inter cargado con weights 400-900 + `variable: '--font-inter'` consumido por `fontFamily.sans`. Body con `font-sans antialiased bg-surface text-ink` aplica tokens globalmente. Metadata cambiada a "Rifa STA 2026".
+  - `app/globals.css`: limpieza wholesale (legacy gradient, dark-mode media query, `.number-grid`, global `*` transition, `.spinner`/`.animate-fadeIn` keyframes — todos sin consumidores).
+  - 3 layout components nuevos en `components/layout/`: PageContainer (`max-w-[560px]`), AppHeader (variants hero/wizard, leftSlot para logo futuro, ArrowLeft con aria-label), StickyBottomBar (slot wrapper con sticky + border + padding).
+  - Validación final: lint+build verde, producción Cloud Run intacta. Final code review aprobó con 5 nits menores.
+- **Acciones principales — Fase 5.B** (13 commits en feature branch `rediseno-ui/fase-5b`):
+  - Setup worktree en `.worktrees/fase-5b` con branch `rediseno-ui/fase-5b` (gitignore actualizado, `.eslintrc.json` con `root: true` para evitar conflicto eslint con repo padre).
+  - **Migración wholesale RifasApp**: 1.587 líneas → 237 líneas. Slim shell con state global (raffleConfig, numbers, selectedNumber, currentStep, formData, purchaseId, paymentId, isLoading, error), API wrappers (loadConfig, loadNumbers, createPurchase, startPayment), effects (polling 30s + query param detection), step actions (goToGrid, goToForm, goToReview, goBack, restart, shareWhatsApp).
+  - **5 pantallas implementadas**: HeroLanding (hero) · NumberGrid + 4 sub-components (NumberCell memo, GridLegend, NumberSearch, RangeTabs con auto-scroll al activo) · BuyerForm + 2 sub-components (FormField con Omit+spread, StudentBlock fondo brand-tint) · PurchaseReview con número grande chip ámbar · 3 status screens (Success con número 4 dígitos + WhatsApp share, Failure con icono red, Pending con clock ámbar).
+  - **3 payment routes fixeados**: fallback URL `https://sistema-ventas-rifas.vercel.app` (URL muerta) → Cloud Run real.
+  - **Cleanup nits 5.A absorbed**: `tailwind.config.js` removed unused `animation.spin-slow` + `backgroundImage.gradient-radial`; `StickyBottomBar` template literal aplanado; `PageContainer` `min-h-screen` → `min-h-dvh` (fix iPhone Safari URL bar jiggle).
+  - **scrollbar-hide utility** agregada a `globals.css` (Tailwind 3 no la trae por default; necesaria para el RangeTabs strip horizontal sin scrollbar visible).
+  - **Fix issue I-1** del final review: cleanup `?payment=...&purchase=...&payment_id=...` del URL después de consumirlos en mount via `window.history.replaceState({}, '', '/')`.
+  - Bundle `/`: 9.22 kB → **7.15 kB** (reducción del 22% a pesar de 13 componentes nuevos — el monolito traía useLocalStorage + lógica de payment timeout que se descartaron).
+  - Lint: 0 warnings ni errors (las 2 preexistentes del legacy se cerraron al borrarlo).
+  - Final code review aprobó con: 0 critical, 1 important fixeado (I-1), 1 important diferido a 5.D (I-2 useCallback formData deps en startPayment), 10 minor diferidos.
+- **Workflow nuevo aplicado**: subagent-driven development con haiku model para todas las tasks mecánicas (rewrites literales del plan). Total 13 implementer subagents + 2 final code reviewers (uno post-5.A, uno post-5.B). Latencia muy buena, calidad alta.
+- **Decisiones de diseño tomadas**:
+  - Naming de tokens: el spec listaba `primary`/`text-primary`/`surface-elevated`; en la implementación quedaron `brand`/`ink`/`surface-raised` por mejora semántica (evitar colisión con keyword `border` de Tailwind y con palette legacy `primary.X`). Spec quedó como referencia conceptual; tokens finales son los del config.
+  - Skeleton-then-meat strategy: Task 1 de 5.B creó el RifasApp shell con 7 placeholders, Tasks 2-9 los reemplazaron uno a uno. Permitió validar el shell antes de invertir en pantallas.
+  - SuccessScreen acepta `number?: number` (opcional): cuando MP redirige back con query params, el state local está vacío (page reload), entonces se muestra fallback "revisá tu correo" en lugar del número grande. Pragmatismo over hidratación API.
+  - Issue M-9 detectado por final reviewer y diferido a 5.D: si user hace back desde review a form y resubmit, se crea zombie purchase + reserva un 2do número. Same behavior que el legacy. El cron cleanup las libera en 15 min. Worth verificar si vale la pena cancelar la 1era purchase explícitamente cuando se hace back. Decisión: 5.D evalúa.
+- **Archivos modificados / creados** (totales sesión):
+  - **Main** (10 commits): `tailwind.config.js`, `app/layout.tsx`, `app/globals.css`, `components/layout/{PageContainer,AppHeader,StickyBottomBar}.tsx` (nuevos), `.gitignore` (.worktrees/), 2 planes nuevos `docs/superpowers/plans/2026-05-05-rediseno-ui-fase-5{a,b}.md`.
+  - **Feature branch `rediseno-ui/fase-5b`** (13 commits): `.eslintrc.json` (root:true), `components/RifasApp.tsx` (rewrite 1587→237), 13 componentes nuevos en `components/{hero,grid,form,review,status}/`, `app/api/payment/{success,failure,pending}/route.ts` (fallback URLs), `tailwind.config.js` + `components/layout/{PageContainer,StickyBottomBar}.tsx` (nits 5.A), `app/globals.css` (scrollbar-hide).
+- **Notas críticas**:
+  - **Feature branch sin mergear**: `rediseno-ui/fase-5b` (HEAD `17aa357`) está pusheado a GitHub pero NO mergeado a main. El merge se hace en Fase 5.D después del smoke en mobile real. La app productiva Cloud Run sigue sirviendo el legacy hasta el deploy de 5.D.
+  - **Issue M-9 (zombie purchases via back-from-review)**: revisar en 5.D si la lógica actual `goBack` desde review debería invocar `/api/purchase/cancel` para liberar el número de la reserva en lugar de dejar al cron timeout. Same behavior que el legacy, no es regresión.
+  - **No bug nuevos en BD**: 0 cambios al schema, 0 cambios a `lib/services/raffleService.ts`, 0 cambios a APIs server. Anti-sobreventa preservada.
+- **Stats sesión**: ~5h efectivas, 0 bugs nuevos en BD, 22 commits totales (10 en main + 13 en feature branch... wait, los 9 de main + 1 gitignore + 2 docs = 12 main; feature branch tiene 13 desde el 8ec48dd. Total ~25 commits). 13 implementer subagents + 2 final reviewers. 0 cargos extra GCP. Producción intacta.
 
 ### 2026-05-05 — Save #4 (fix BUG-010 + cierre Fase 4.2 con compra real + brainstorm Fase 5)
 - **Tareas completadas**: 4.2 (cerrada al 100% con compra real de Romi tras fix BUG-010) · 5.0 brainstorming + spec rediseño UI aprobado
