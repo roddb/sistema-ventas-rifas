@@ -82,13 +82,41 @@
 
 - [x] 7.0 Brainstorming + spec aprobado (2026-05-06) — `docs/superpowers/specs/2026-05-06-carrito-unificado-design.md` (556 líneas, 13 decisiones cerradas) - DEV
 - [x] 7.A Server-side completo: schema orders padre + 3 ALTER TABLE migration aplicada a Turso prod + OrderService (createOrder/cancelOrder/confirmOrderPayment/removeNumberFromOrder/releaseExpiredOrders) con locks optimistas + 7 routes nuevas /api/order/* + webhook dispatch ORD-/PUR-legacy/COM-legacy + cron refactor + 12 routes viejas borradas + cleanup raffleService/comboService. 13 commits en feature branch `feature/carrito-unificado`. Final review por payment-flow-debugger ✅. Plan: `docs/superpowers/plans/2026-05-06-carrito-unificado-fase-7.md` - DEV
-- [ ] 7.B UI carrito cross-product (OrderFlow + StickyCartBar + CartDrawer + CrossSellSheet + UnifiedBuyerForm + UnifiedReview + OrderSuccessScreen + multi-select rifa) — branch `feature/carrito-unificado` NO MERGEABLE a main hasta cerrar 7.B (UI todavía llama endpoints viejos borrados) - DEV
+- [x] 7.B UI carrito cross-product completa: OrderFlow orchestrator + StickyCartBar + CartDrawer + CrossSellSheet + UnifiedBuyerForm + UnifiedReview + OrderSuccessScreen + NumberGrid multi-select cap 10 + RifasApp shell refactor + 7 componentes viejos borrados. 5 commits en feature branch. Lint+build verde. Final code reviewer: 1 critical (double PageContainer ComboCatalog) + 3 important (precio hardcodeado hero, buttons sin type, error banner Tailwind defaults) detectados → fixeados pre-cierre - DEV
 - [ ] 7.C Tests concurrencia cross-product (4 escenarios: overlapping nums + cross-product / cleanup vs webhook / removeNumber vs webhook / 4 users overlapping) - TEST
 - [ ] 7.D Deploy + smoke prod automatizado (URL inspection MP API lección BUG-010) + compra real cross-product $18.000 con tercero - TEST
 
 ---
 
 ## Bitácora
+
+### 2026-05-06 — Sub-fase 7.B completa (UI carrito unificado)
+- **Tareas completadas**: 7.B T23-T33 (11 tasks). UI completa de carrito unificado en branch `feature/carrito-unificado`.
+- **7 componentes nuevos creados**:
+  - `components/cart/StickyCartBar.tsx` — bottom bar tappable always-visible cuando carrito tiene items
+  - `components/cart/CartDrawer.tsx` — mini-carrito editable con × para quitar nums + stepper para combos
+  - `components/cross-sell/CrossSellSheet.tsx` — bottom sheet "¿querés sumar X?" pre-form
+  - `components/order/OrderFlow.tsx` — orchestrator con state global del carrito + 4 API wrappers + handlers cross-sell
+  - `components/order/UnifiedBuyerForm.tsx` — form adaptativo (6 campos si hasRaffle, 3 si solo combos)
+  - `components/order/UnifiedReview.tsx` — review breakdown rifa+combos+buyer+total con CTA pagar
+  - `components/order/OrderSuccessScreen.tsx` — success genérico con orderId + breakdown + WhatsApp share
+- **Componentes refactoreados**:
+  - `components/grid/NumberGrid.tsx` — single-select → multi-select cap 10 con check icon
+  - `components/grid/NumberCell.tsx` — agregada prop `isSelected`
+  - `components/RifasApp.tsx` — slim shell delega a OrderFlow después de split hero
+  - `components/status/{FailureScreen,PendingScreen}.tsx` — agregado `'order'` al union productType
+- **Componentes eliminados (7)**: `combos/{ComboFlow,ComboBuyerForm,ComboReview}.tsx`, `status/{ComboSuccessScreen,SuccessScreen}.tsx`, `review/PurchaseReview.tsx`, `form/BuyerForm.tsx`. Total 742 líneas borradas.
+- **Final code reviewer (sonnet)** detectó 1 critical + 3 important pre-cierre → fixeados en commit `809f737`:
+  - CRIT-1: double PageContainer nesting en ComboCatalog (cuando montado desde OrderFlow)
+  - IMP-1: precio combo $15.000 hardcoded en ProductSplitHero → derivado de `COMBOS[0].price`
+  - IMP-2: 12 botones sin `type="button"` → agregado
+  - IMP-3: error banner usaba `bg-red-50/text-red-700` → cambiado a tokens `state-sold` del design system
+  - + 2 minor (cross-sell viewHasOwnHeader, aria-labels contextuales)
+- **Strengths del review**: cross-sell logic robusta (crossSellShown setea en accept y decline), max-selection silencioso, query params cleanup correcto, polling 30s preservado, NumberCell memo, StickyCartBar dual CTA elegante.
+- **Bundle home `/`**: 7.15 kB (Fase 5.B) → 10.3 kB (post-Fase 7.B). +3 kB justificado por OrderFlow + 7 componentes nuevos + carrito.
+- **Commits del feature branch (5 + 1 fix)**: 38bf49c (T23-T29 7 componentes), c62bdb9 (T30 OrderFlow), 1f654d3 (T31 RifasApp shell), 37d3977 (T32 borrar 7 viejos), 809f737 (T33 fixes review).
+- **Branch `feature/carrito-unificado` con 19 commits totales** (13 de 7.A + 6 de 7.B). Listo para 7.C concurrency tests + 7.D deploy.
+- **Producción intacta**: revision `00014-9wz` con app pre-Fase 7.
 
 ### 2026-05-06 — Sub-fase 7.A completa (server-side carrito unificado)
 - **Tareas completadas**: 7.A T1-T22 (22 tasks). Server-side completo de carrito unificado en branch `feature/carrito-unificado` (worktree `.worktrees/fase-7`).
