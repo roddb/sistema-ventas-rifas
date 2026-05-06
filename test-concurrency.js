@@ -146,30 +146,27 @@ async function scenario4_fourUsersCrossProduct() {
     log(`User ${r.label}: status=${r.status}, success=${r.json.success}, error="${r.json.error ?? ''}", orderId=${r.json.data?.orderId ?? 'none'}`);
   });
 
-  // Verify: 0 sobreventa - chequear /api/numbers
-  await sleep(500);
-  const numsRes = await fetch('http://localhost:3000/api/numbers');
-  const numsJson = await numsRes.json();
-  const inRange = (numsJson.data ?? []).filter((n) => n.number >= 1990 && n.number <= 2000);
-  const reservedOrSold = inRange.filter((n) => n.status === 'reserved' || n.status === 'sold');
+  // Validación real: unión de numberIds en orders successful debe ser única
+  const successfulRequests = requests
+    .map((r, i) => ({ label: r.label, numberIds: r.body.raffle?.numberIds ?? [], success: results[i].json.success }))
+    .filter((x) => x.success);
 
-  // Cada número aparece como 'reserved' o 'sold' a lo más una vez en raffle_numbers (constraint PK).
-  // El test real es: ¿hay overlap detectable en la salida? Si scenario funcionó, los nums duplicados
-  // debían rechazarse con 409.
-  const successCount = results.filter((r) => r.json.success).length;
-  const reservedNumsForSuccessOrders = reservedOrSold.length;
-  log(`Successful orders: ${successCount}`);
-  log(`Reserved/sold nums in 1990-2000 range: ${reservedNumsForSuccessOrders}`);
+  const allNums = successfulRequests.flatMap((r) => r.numberIds);
+  const dupes = allNums.filter((n, i) => allNums.indexOf(n) !== i);
+
+  log(`Successful orders: ${successfulRequests.length}`);
+  log(`All claimed nums: [${allNums.join(', ')}]`);
+
+  if (dupes.length === 0) {
+    ok(`Scenario 4 PASSED: anti-sobreventa preserved (${successfulRequests.length} orders, 0 duplicate nums)`);
+  } else {
+    fail(`Scenario 4 FAILED: duplicates detected ${[...new Set(dupes)].join(', ')} — sobreventa real`);
+  }
 
   // Cleanup
   for (const r of results) {
     if (r.json.data?.orderId) await cancelOrder(r.json.data.orderId);
   }
-
-  // Sanity: counter de ID por número (PK SQLite, max 1 por número siempre)
-  // Si había sobreventa interna, las verificaciones del orderService habrían throw. Si llegamos acá
-  // con orders consistent, anti-sobreventa funciona.
-  ok('Scenario 4 PASSED: anti-sobreventa preserved (no race condition aceptó duplicados sin throw)');
 }
 
 async function scenario2_documentedManual() {
