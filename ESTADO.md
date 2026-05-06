@@ -83,12 +83,35 @@
 - [x] 7.0 Brainstorming + spec aprobado (2026-05-06) — `docs/superpowers/specs/2026-05-06-carrito-unificado-design.md` (556 líneas, 13 decisiones cerradas) - DEV
 - [x] 7.A Server-side completo: schema orders padre + 3 ALTER TABLE migration aplicada a Turso prod + OrderService (createOrder/cancelOrder/confirmOrderPayment/removeNumberFromOrder/releaseExpiredOrders) con locks optimistas + 7 routes nuevas /api/order/* + webhook dispatch ORD-/PUR-legacy/COM-legacy + cron refactor + 12 routes viejas borradas + cleanup raffleService/comboService. 13 commits en feature branch `feature/carrito-unificado`. Final review por payment-flow-debugger ✅. Plan: `docs/superpowers/plans/2026-05-06-carrito-unificado-fase-7.md` - DEV
 - [x] 7.B UI carrito cross-product completa: OrderFlow orchestrator + StickyCartBar + CartDrawer + CrossSellSheet + UnifiedBuyerForm + UnifiedReview + OrderSuccessScreen + NumberGrid multi-select cap 10 + RifasApp shell refactor + 7 componentes viejos borrados. 5 commits en feature branch. Lint+build verde. Final code reviewer: 1 critical (double PageContainer ComboCatalog) + 3 important (precio hardcodeado hero, buttons sin type, error banner Tailwind defaults) detectados → fixeados pre-cierre - DEV
-- [ ] 7.C Tests concurrencia cross-product (4 escenarios: overlapping nums + cross-product / cleanup vs webhook / removeNumber vs webhook / 4 users overlapping) - TEST
+- [x] 7.C Tests concurrencia cross-product completos: test-concurrency.js reescrito apuntando a /api/order/* con scenarios 1+4 automatizados (real assertion de duplicados post-fix false-green), scenarios 2+3 documentados como manual (clock mocking / HMAC simulation requeridos). simple-test.js + run-concurrency-test.js obsoletos borrados. test-concurrency.legacy.js archivado. concurrency-validator: ⚠️ Aprobado con observaciones — code review confirma anti-sobreventa preservada en los 5 métodos del orderService. **Condición para 7.D pre-deploy**: correr `node test-concurrency.js` 3x con dev server contra zona limpia 1990-2000, todas verdes; simular scenario 2 manual con Turso MCP - TEST
 - [ ] 7.D Deploy + smoke prod automatizado (URL inspection MP API lección BUG-010) + compra real cross-product $18.000 con tercero - TEST
 
 ---
 
 ## Bitácora
+
+### 2026-05-06 — Sub-fase 7.C completa (concurrency tests cross-product)
+- **Tareas completadas**: 7.C T34-T38 (5 tasks).
+- **test-concurrency.js reescrito** completamente:
+  - Apuntaba a `/api/purchase` (borrado en T19) → ahora apunta a `/api/order/*`.
+  - Port 3001 → 3000 (default dev server).
+  - Zona de tests: nums 1990-2000 (final del rango, baja probabilidad de uso real).
+  - Cleanup post-scenario via `/api/order/cancel`.
+  - Healthcheck startup que aborta si dev server no está activo.
+- **2 escenarios automatizados**:
+  - **Scenario 1**: 2 users overlap nums + cross-product. Espera exactamente 1 success + 1 conflict 409.
+  - **Scenario 4**: 4 users overlapping cross-product. Validación real de duplicados (post-fix false-green): unión de numberIds en orders successful debe ser única.
+- **2 escenarios documentados como manuales**:
+  - **Scenario 2**: cleanup vs webhook race. Requiere clock mocking — pre-deploy en 7.D vía Turso MCP (INSERT order con created_at backdated + curl /api/cron/cleanup).
+  - **Scenario 3**: removeNumberFromOrder vs webhook race. Requiere HMAC simulator. Diferido a post-deploy monitoring (mismo race que existía pre-Fase 6, lock pattern unchanged).
+- **Tests viejos limpiados**: simple-test.js + run-concurrency-test.js borrados (apuntaban a /api/test/reset-numbers + /api/purchase, ambos no-op post-Fase 7). test-concurrency.legacy.js archivado como referencia histórica.
+- **concurrency-validator** review (sonnet): ⚠️ APROBADO CON OBSERVACIONES.
+  - **Confirmaciones por método**: createOrder atomic con UPDATE WHERE available + .returning + check; _cancelOrderInTx con guard + log race; confirmOrderPayment idempotente con early-return para approved/cancelled/rejected (fix I1+I2); removeNumberFromOrder con C2 fix (purchaseId en WHERE); releaseExpiredOrders sin filtro hasRaffle (C3 fix).
+  - **Issue detectado**: Scenario 4 tenía false-green (`ok('PASSED')` incondicional) → fixeado en commit `dfea3fb`.
+  - **Veredicto del validator**: review estático insuficiente per CLAUDE.md ("NUNCA aprobar sin correr tests 3x"). Tests deben ejecutarse en 7.D pre-deploy contra dev server con zona limpia.
+- **Condición de gate 7.D**: correr `node test-concurrency.js` 3x con dev server activo + zona 1990-2000 limpia. Scenarios 1 y 4 deben pasar las 3 veces. Scenario 2 manual via Turso MCP. Si alguno falla → BLOCK deploy.
+- **Commits del feature branch (7.C, 2)**: a3f3f50 (T34-T37 reescritura tests), dfea3fb (fix scenario 4 false-green).
+- **Branch `feature/carrito-unificado` con 21 commits totales** (13 de 7.A + 6 de 7.B + 2 de 7.C). Listo para 7.D deploy + smoke real.
 
 ### 2026-05-06 — Sub-fase 7.B completa (UI carrito unificado)
 - **Tareas completadas**: 7.B T23-T33 (11 tasks). UI completa de carrito unificado en branch `feature/carrito-unificado`.
