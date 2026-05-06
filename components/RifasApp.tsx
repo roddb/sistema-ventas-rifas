@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import PageContainer from './layout/PageContainer';
-import AppHeader from './layout/AppHeader';
 import ProductSplitHero from './hero/ProductSplitHero';
 import NumberGrid from './grid/NumberGrid';
 import BuyerForm from './form/BuyerForm';
@@ -10,6 +9,7 @@ import PurchaseReview from './review/PurchaseReview';
 import SuccessScreen from './status/SuccessScreen';
 import FailureScreen from './status/FailureScreen';
 import PendingScreen from './status/PendingScreen';
+import ComboFlow from './combos/ComboFlow';
 
 // === Types ===
 
@@ -49,18 +49,6 @@ const EMPTY_FORM: FormData = {
 
 const POLLING_INTERVAL_MS = 30000;
 
-// === ComboFlow placeholder — replaced in Task 18 ===
-
-function ComboFlowStub({ onExit }: { onExit: () => void }) {
-  return (
-    <PageContainer>
-      <AppHeader variant="wizard" onBack={onExit} />
-      <main className="px-5 pt-6 pb-10 text-ink-muted text-sm">
-        ComboFlow placeholder · se implementa en Task 18
-      </main>
-    </PageContainer>
-  );
-}
 
 export default function RifasApp() {
   // === State ===
@@ -74,6 +62,9 @@ export default function RifasApp() {
   const [paymentId, setPaymentId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Combo flow — initial step + order code set from MP redirect query params
+  const [comboInitialStep, setComboInitialStep] = useState<'catalog' | 'success' | 'failure' | 'pending' | null>(null);
+  const [comboInitialOrderCode, setComboInitialOrderCode] = useState<string | null>(null);
 
   // === API wrappers ===
   const loadConfig = useCallback(async () => {
@@ -174,10 +165,25 @@ export default function RifasApp() {
     return () => clearInterval(id);
   }, [loadConfig, loadNumbers]);
 
-  // Detect status redirect from MP callback (?payment=success|failure|pending)
+  // Detect status redirect from MP callback
+  // Combo params: ?combo=success|failure|pending&order=COM-xxx
+  // Rifa params:  ?payment=success|failure|pending&purchase=PUR-xxx
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
+
+    // --- Combo branch (check first) ---
+    const comboStatus = params.get('combo');
+    const order = params.get('order');
+    if (comboStatus && order) {
+      setView('combo');
+      setComboInitialStep(comboStatus as 'success' | 'failure' | 'pending');
+      setComboInitialOrderCode(order);
+      window.history.replaceState({}, '', '/');
+      return;
+    }
+
+    // --- Rifa branch ---
     const payment = params.get('payment');
     const purchase = params.get('purchase');
     const pid = params.get('payment_id');
@@ -261,7 +267,13 @@ export default function RifasApp() {
   }
 
   if (view === 'combo') {
-    return <ComboFlowStub onExit={() => setView('home')} />;
+    return (
+      <ComboFlow
+        onExit={() => setView('home')}
+        initialStep={comboInitialStep ?? 'catalog'}
+        initialOrderCode={comboInitialOrderCode}
+      />
+    );
   }
 
   // view === 'rifa' — fall through to wizard JSX
