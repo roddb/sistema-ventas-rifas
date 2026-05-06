@@ -26,7 +26,7 @@ export default function CartDrawer(props: CartDrawerProps) {
         <div className="max-w-[560px] mx-auto px-4 py-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-extrabold tracking-tight">Tu compra</h2>
-            <button onClick={props.onClose} aria-label="Cerrar">
+            <button type="button" onClick={props.onClose} aria-label="Cerrar">
               <X size={24} />
             </button>
           </div>
@@ -40,7 +40,7 @@ export default function CartDrawer(props: CartDrawerProps) {
                     <span className="font-semibold">#{String(n).padStart(4, '0')}</span>
                     <div className="flex items-center gap-3">
                       <span className="text-sm text-ink-soft">${props.pricePerNumber.toLocaleString('es-AR')}</span>
-                      <button onClick={() => props.onRemoveNumber(n)} aria-label={`Quitar número ${n}`}>
+                      <button type="button" onClick={() => props.onRemoveNumber(n)} aria-label={`Quitar número ${n}`}>
                         <Trash2 size={18} className="text-state-sold" />
                       </button>
                     </div>
@@ -65,22 +65,24 @@ export default function CartDrawer(props: CartDrawerProps) {
                       </div>
                       <div className="flex items-center gap-2">
                         <button
+                          type="button"
                           onClick={() => props.onComboQuantityChange(it.comboId, -1)}
                           className="bg-surface w-8 h-8 rounded flex items-center justify-center"
                           disabled={it.quantity <= 1}
-                          aria-label="Restar"
+                          aria-label={`Restar ${combo.name}`}
                         >
                           <Minus size={16} />
                         </button>
                         <span className="w-6 text-center font-semibold">{it.quantity}</span>
                         <button
+                          type="button"
                           onClick={() => props.onComboQuantityChange(it.comboId, +1)}
                           className="bg-surface w-8 h-8 rounded flex items-center justify-center"
-                          aria-label="Sumar"
+                          aria-label={`Sumar ${combo.name}`}
                         >
                           <Plus size={16} />
                         </button>
-                        <button onClick={() => props.onRemoveCombo(it.comboId)} aria-label={`Quitar ${combo.name}`}>
+                        <button type="button" onClick={() => props.onRemoveCombo(it.comboId)} aria-label={`Quitar ${combo.name}`}>
                           <Trash2 size={18} className="text-state-sold ml-2" />
                         </button>
                       </div>
@@ -97,6 +99,7 @@ export default function CartDrawer(props: CartDrawerProps) {
           </div>
 
           <button
+            type="button"
             onClick={props.onClose}
             className="w-full bg-brand text-white rounded-ctl py-3 font-semibold"
           >

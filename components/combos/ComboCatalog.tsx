@@ -1,7 +1,6 @@
 'use client';
 
 import { useMemo } from 'react';
-import PageContainer from '../layout/PageContainer';
 import AppHeader from '../layout/AppHeader';
 import StickyBottomBar from '../layout/StickyBottomBar';
 import ComboRow from './ComboRow';
@@ -25,7 +24,7 @@ export default function ComboCatalog({ cart, onChangeQuantity, onContinue, onBac
   const canContinue = totalCount > 0;
 
   return (
-    <PageContainer>
+    <>
       <AppHeader variant="wizard" onBack={onBack} title="Combos del evento" />
       <main className="px-5 pt-4 pb-32 flex flex-col gap-2.5">
         {COMBOS.map((combo) => (
@@ -58,6 +57,6 @@ export default function ComboCatalog({ cart, onChangeQuantity, onContinue, onBac
           </button>
         </div>
       </StickyBottomBar>
-    </PageContainer>
+    </>
   );
 }

@@ -93,6 +93,7 @@ export default function UnifiedReview(props: UnifiedReviewProps) {
 
       <div className="space-y-2">
         <button
+          type="button"
           onClick={props.onConfirm}
           disabled={props.isConfirming}
           className="w-full bg-brand text-white rounded-ctl py-3 font-semibold disabled:opacity-50 flex items-center justify-center gap-2"
@@ -102,6 +103,7 @@ export default function UnifiedReview(props: UnifiedReviewProps) {
             : 'Pagar con MercadoPago'}
         </button>
         <button
+          type="button"
           onClick={props.onBack}
           disabled={props.isConfirming}
           className="w-full bg-surface-raised text-ink rounded-ctl py-3 font-semibold"

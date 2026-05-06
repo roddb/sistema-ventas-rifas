@@ -79,12 +79,14 @@ export default function OrderSuccessScreen(props: OrderSuccessScreenProps) {
 
       <div className="space-y-2">
         <button
+          type="button"
           onClick={handleShare}
           className="w-full bg-state-available-fg text-white rounded-ctl py-3 font-semibold flex items-center justify-center gap-2"
         >
           <Share2 size={18} /> Compartir por WhatsApp
         </button>
         <button
+          type="button"
           onClick={props.onRestart}
           className="w-full bg-surface-raised text-ink rounded-ctl py-3 font-semibold"
         >

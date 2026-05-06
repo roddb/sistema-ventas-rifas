@@ -27,12 +27,14 @@ export default function CrossSellSheet({ open, onClose, productSold, onAccept, o
           </p>
           <div className="space-y-3">
             <button
+              type="button"
               onClick={onAccept}
               className="w-full bg-brand text-white rounded-ctl py-3 font-semibold"
             >
               {otherCta}
             </button>
             <button
+              type="button"
               onClick={onDecline}
               className="w-full bg-surface-raised text-ink rounded-ctl py-3 font-semibold"
             >

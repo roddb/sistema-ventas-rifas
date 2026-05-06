@@ -185,7 +185,8 @@ export default function OrderFlow(props: OrderFlowProps) {
   };
 
   // Views that manage their own header (NumberGrid and ComboCatalog render AppHeader internally)
-  const viewHasOwnHeader = view === 'rifa-grid' || view === 'combo-catalog';
+  // cross-sell uses a bottom sheet overlay — no top header needed from the wizard shell
+  const viewHasOwnHeader = view === 'rifa-grid' || view === 'combo-catalog' || view === 'cross-sell';
   // Status views (success/failure/pending) also manage their own header
   const isStatusView = view === 'success' || view === 'failure' || view === 'pending';
 
@@ -207,7 +208,7 @@ export default function OrderFlow(props: OrderFlowProps) {
       )}
 
       {error && !isStatusView && (
-        <div className="mx-4 mt-3 bg-red-50 text-red-700 border border-red-200 rounded-md px-3 py-2 text-sm">
+        <div className="mx-4 mt-3 bg-state-sold/10 text-state-sold border border-state-sold/30 rounded-md px-3 py-2 mb-3 text-sm">
           {error}
         </div>
       )}
