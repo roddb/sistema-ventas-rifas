@@ -26,9 +26,31 @@ export const raffleNumbers = sqliteTable('raffle_numbers', {
   updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`)
 });
 
+export const orders = sqliteTable('orders', {
+  id: text('id').primaryKey(),
+  buyerName: text('buyer_name').notNull(),
+  email: text('email').notNull(),
+  phone: text('phone'),
+  studentName: text('student_name'),
+  division: text('division'),
+  course: text('course'),
+  totalAmount: real('total_amount').notNull(),
+  hasRaffle: integer('has_raffle', { mode: 'boolean' }).notNull(),
+  hasCombos: integer('has_combos', { mode: 'boolean' }).notNull(),
+  mercadoPagoPreferenceId: text('mercado_pago_preference_id'),
+  mercadoPagoPaymentId: text('mercado_pago_payment_id'),
+  paymentStatus: text('payment_status', {
+    enum: ['pending', 'approved', 'rejected', 'cancelled']
+  }).default('pending'),
+  paymentMethod: text('payment_method'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`)
+});
+
 export const purchases = sqliteTable('purchases', {
   id: text('id').primaryKey(),
   raffleId: integer('raffle_id').notNull().references(() => raffles.id),
+  orderId: text('order_id').references(() => orders.id),
   buyerName: text('buyer_name').notNull(),
   studentName: text('student_name').notNull(),
   division: text('division').notNull(),
@@ -39,8 +61,8 @@ export const purchases = sqliteTable('purchases', {
   numbersCount: integer('numbers_count').notNull(),
   mercadoPagoPreferenceId: text('mercado_pago_preference_id'),
   mercadoPagoPaymentId: text('mercado_pago_payment_id'),
-  paymentStatus: text('payment_status', { 
-    enum: ['pending', 'approved', 'rejected', 'cancelled'] 
+  paymentStatus: text('payment_status', {
+    enum: ['pending', 'approved', 'rejected', 'cancelled']
   }).default('pending'),
   paymentMethod: text('payment_method'),
   createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
@@ -58,12 +80,14 @@ export const eventLogs = sqliteTable('event_logs', {
   id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }),
   eventType: text('event_type').notNull(),
   purchaseId: text('purchase_id').references(() => purchases.id),
-  data: text('data'), // JSON string
+  orderId: text('order_id').references(() => orders.id),
+  data: text('data'),
   createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`)
 });
 
 export const comboPurchases = sqliteTable('combo_purchases', {
   id: text('id').primaryKey(),
+  orderId: text('order_id').references(() => orders.id),
   buyerName: text('buyer_name').notNull(),
   email: text('email').notNull(),
   phone: text('phone').notNull(),
