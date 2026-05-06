@@ -11,6 +11,7 @@ CREATE TABLE `combo_purchase_items` (
 --> statement-breakpoint
 CREATE TABLE `combo_purchases` (
 	`id` text PRIMARY KEY NOT NULL,
+	`order_id` text,
 	`buyer_name` text NOT NULL,
 	`email` text NOT NULL,
 	`phone` text NOT NULL,
@@ -21,16 +22,38 @@ CREATE TABLE `combo_purchases` (
 	`payment_status` text DEFAULT 'pending',
 	`payment_method` text,
 	`created_at` integer DEFAULT CURRENT_TIMESTAMP,
-	`updated_at` integer DEFAULT CURRENT_TIMESTAMP
+	`updated_at` integer DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY (`order_id`) REFERENCES `orders`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
 CREATE TABLE `event_logs` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`event_type` text NOT NULL,
 	`purchase_id` text,
+	`order_id` text,
 	`data` text,
 	`created_at` integer DEFAULT CURRENT_TIMESTAMP,
-	FOREIGN KEY (`purchase_id`) REFERENCES `purchases`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`purchase_id`) REFERENCES `purchases`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`order_id`) REFERENCES `orders`(`id`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
+CREATE TABLE `orders` (
+	`id` text PRIMARY KEY NOT NULL,
+	`buyer_name` text NOT NULL,
+	`email` text NOT NULL,
+	`phone` text,
+	`student_name` text,
+	`division` text,
+	`course` text,
+	`total_amount` real NOT NULL,
+	`has_raffle` integer NOT NULL,
+	`has_combos` integer NOT NULL,
+	`mercado_pago_preference_id` text,
+	`mercado_pago_payment_id` text,
+	`payment_status` text DEFAULT 'pending',
+	`payment_method` text,
+	`created_at` integer DEFAULT CURRENT_TIMESTAMP,
+	`updated_at` integer DEFAULT CURRENT_TIMESTAMP
 );
 --> statement-breakpoint
 CREATE TABLE `purchase_numbers` (
@@ -45,6 +68,7 @@ CREATE TABLE `purchase_numbers` (
 CREATE TABLE `purchases` (
 	`id` text PRIMARY KEY NOT NULL,
 	`raffle_id` integer NOT NULL,
+	`order_id` text,
 	`buyer_name` text NOT NULL,
 	`student_name` text NOT NULL,
 	`division` text NOT NULL,
@@ -59,7 +83,8 @@ CREATE TABLE `purchases` (
 	`payment_method` text,
 	`created_at` integer DEFAULT CURRENT_TIMESTAMP,
 	`updated_at` integer DEFAULT CURRENT_TIMESTAMP,
-	FOREIGN KEY (`raffle_id`) REFERENCES `raffles`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`raffle_id`) REFERENCES `raffles`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`order_id`) REFERENCES `orders`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
 CREATE TABLE `raffle_numbers` (
