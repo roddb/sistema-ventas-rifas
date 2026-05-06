@@ -8,7 +8,6 @@ import RangeTabs from './RangeTabs';
 import type { RaffleNumber } from '../RifasApp';
 
 const RANGE_SIZE = 100;
-const MAX_SELECTION = 10;
 
 interface NumberGridProps {
   numbers: RaffleNumber[];
@@ -58,7 +57,7 @@ export default function NumberGrid({
     const idx = Math.floor((n - 1) / RANGE_SIZE);
     setActiveRangeIndex(idx);
     const status = statusByNumber.get(n);
-    if (status === 'available' && !selectedSet.has(n) && selected.length < MAX_SELECTION) {
+    if (status === 'available' && !selectedSet.has(n)) {
       onSelectionChange([...selected, n]);
     }
   };
@@ -67,11 +66,10 @@ export default function NumberGrid({
     if (selectedSet.has(n)) {
       // Deselect
       onSelectionChange(selected.filter((x) => x !== n));
-    } else if (selected.length < MAX_SELECTION) {
+    } else {
       // Add
       onSelectionChange([...selected, n]);
     }
-    // else: cap reached, ignore
   };
 
   const totalCost = selected.length * pricePerNumber;
@@ -81,7 +79,7 @@ export default function NumberGrid({
       <AppHeader
         variant="wizard"
         title="Elegí tus números"
-        meta={`${selected.length}/${MAX_SELECTION} sel.`}
+        meta={selected.length > 0 ? `${selected.length} sel.` : undefined}
         onBack={onBack}
       />
 

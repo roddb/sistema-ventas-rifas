@@ -30,9 +30,16 @@ export async function createOrderPreference(data: CreateOrderPreferenceData) {
     const items: PreferenceItem[] = [];
 
     if (data.raffle && data.raffle.numbers.length > 0) {
+      // MP title limit = 256 chars. Si la lista de números no cabe en 200
+      // chars (margen seguro), usar count en lugar de listar.
+      const numbersList = data.raffle.numbers.join(', ');
+      const fullTitle = `${data.raffle.title} - Números: ${numbersList}`;
+      const title = fullTitle.length <= 200
+        ? fullTitle
+        : `${data.raffle.title} - ${data.raffle.numbers.length} números`;
       items.push({
         id: data.orderId,
-        title: `${data.raffle.title} - Números: ${data.raffle.numbers.join(', ')}`,
+        title,
         quantity: 1,
         unit_price: data.raffle.pricePerNumber * data.raffle.numbers.length,
         currency_id: 'ARS'

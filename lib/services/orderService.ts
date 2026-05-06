@@ -44,8 +44,8 @@ export class OrderService {
       throw new Error('Order must have at least raffle or combos');
     }
 
-    if (hasRaffle && (input.raffle!.numberIds.length < 1 || input.raffle!.numberIds.length > 10)) {
-      throw new Error('Cap de números rifa: 1-10 por order');
+    if (hasRaffle && input.raffle!.numberIds.length < 1) {
+      throw new Error('Debe seleccionar al menos 1 número');
     }
 
     if (hasRaffle && (!input.buyer.studentName || !input.buyer.division || !input.buyer.course)) {

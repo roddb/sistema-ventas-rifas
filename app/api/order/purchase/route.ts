@@ -16,7 +16,7 @@ const Schema = z.object({
   }),
   raffle: z.object({
     raffleId: z.number().int().positive(),
-    numberIds: z.array(z.number().int().positive()).min(1).max(10),
+    numberIds: z.array(z.number().int().positive()).min(1),
   }).optional(),
   combos: z.array(z.object({
     comboId: z.string(),
