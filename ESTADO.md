@@ -80,24 +80,36 @@
 ### Fase 7: Carrito unificado rifa + combos (2026-05-06 — en progreso)
 > Pedido del usuario al cierre de Fase 6: que un mismo comprador pueda agregar N números de rifa + N combos en un mismo carrito y pagar todo en una sola transacción MP. Esto invierte la decisión "compra cross-product = NO" de Fase 6 sección 2 y reactiva multi-selección de números (la rifa 2025 lo soportaba, Fase 5.B lo restringió a 1 por compra).
 
-- [x] 7.0 Brainstorming + spec (próxima sesión) — temas a cerrar: schema (relación rifa_numbers + combo_items en una "compra padre"), concurrencia (timeout reserva rifa 15min vs combos sin timeout — qué pasa si user tarda y se vence), webhook dispatch atómico (ambos sub-flows o uno solo), UI (split hero pierde sentido), MP preference items mezclados, naming (`PUR-` / `COM-` / nuevo `ORD-`), cleanup soft - DEV
-- [~] 7.A Schema + service unificado - DEV
-- [ ] 7.B UI carrito cross-product - DEV
-- [ ] 7.C Tests concurrencia (CRÍTICO — patrón rifa intacto) - TEST
-- [ ] 7.D Deploy + compra real - TEST
+- [x] 7.0 Brainstorming + spec aprobado (2026-05-06) — `docs/superpowers/specs/2026-05-06-carrito-unificado-design.md` (556 líneas, 13 decisiones cerradas) - DEV
+- [x] 7.A Server-side completo: schema orders padre + 3 ALTER TABLE migration aplicada a Turso prod + OrderService (createOrder/cancelOrder/confirmOrderPayment/removeNumberFromOrder/releaseExpiredOrders) con locks optimistas + 7 routes nuevas /api/order/* + webhook dispatch ORD-/PUR-legacy/COM-legacy + cron refactor + 12 routes viejas borradas + cleanup raffleService/comboService. 13 commits en feature branch `feature/carrito-unificado`. Final review por payment-flow-debugger ✅. Plan: `docs/superpowers/plans/2026-05-06-carrito-unificado-fase-7.md` - DEV
+- [ ] 7.B UI carrito cross-product (OrderFlow + StickyCartBar + CartDrawer + CrossSellSheet + UnifiedBuyerForm + UnifiedReview + OrderSuccessScreen + multi-select rifa) — branch `feature/carrito-unificado` NO MERGEABLE a main hasta cerrar 7.B (UI todavía llama endpoints viejos borrados) - DEV
+- [ ] 7.C Tests concurrencia cross-product (4 escenarios: overlapping nums + cross-product / cleanup vs webhook / removeNumber vs webhook / 4 users overlapping) - TEST
+- [ ] 7.D Deploy + smoke prod automatizado (URL inspection MP API lección BUG-010) + compra real cross-product $18.000 con tercero - TEST
 
 ---
 
 ## Bitácora
 
-### 2026-05-06 — Task 7.A.1: Worktree setup completado
-- **Tareas completadas**: 7.A T1 (setup worktree + eslint root)
-- **Acciones**:
-  - Creado worktree `.worktrees/fase-7` con rama `feature/carrito-unificado` desde main
-  - Agregado `.eslintrc.json` con `"root": true` para evitar conflicto de plugins eslint (lección Fase 5.B)
-  - Verificado `npm run lint` ✓ (sin warnings), `npm run build` ✓ (route bundle OK)
-  - Commiteado en feature branch: `590abd7` "chore(fase-7): worktree setup + eslint root"
-- **Próxima tarea**: 7.A T2 (schema additions Drizzle)
+### 2026-05-06 — Sub-fase 7.A completa (server-side carrito unificado)
+- **Tareas completadas**: 7.A T1-T22 (22 tasks). Server-side completo de carrito unificado en branch `feature/carrito-unificado` (worktree `.worktrees/fase-7`).
+- **Migration aplicada a BD productiva**: vía Turso MCP — CREATE TABLE orders + 3x ALTER TABLE ADD COLUMN order_id en purchases/combo_purchases/event_logs. Verificado: 8 tablas, 7 cancelled legacy con order_id NULL, 0 datos perdidos.
+- **OrderService creado** con 5 métodos públicos atómicos: createOrder (rifa+combos en 1 tx con UPDATE WHERE status=available + .returning), cancelOrder (helper privado _cancelOrderInTx + race detection logs ORDER_CANCEL_CHILD_RACE), confirmOrderPayment (idempotente, early-return para approved/cancelled/rejected — fix I1+I2 evita loop 503 con MP cuando order ya cancelled), removeNumberFromOrder (guard purchaseId en WHERE — fix C2), releaseExpiredOrders (sin filtro hasRaffle — fix C3, ahora limpia combo-only también).
+- **Webhook dispatch refactoreado**: rama ORD- llama OrderService, ramas PUR-/COM- log+200 retrocompat. HMAC verify intacto. 503 retry para errores transitorios.
+- **Cron cleanup migrado** a OrderService.releaseExpiredOrders. CRON_SECRET auth preservado.
+- **createOrderPreference** en lib/mercadopago.ts reemplaza createPaymentPreference + createComboPreference. URLs runtime baseUrl env (lección BUG-010). Items mixtos rifa+combos (Q7 A: rifa 1 item agregado, combos N items por tipo).
+- **7 routes nuevas /api/order/***: purchase, cancel, items DELETE, preference, payment/{success,failure,pending}. Zod validation. Total recalculado server-side.
+- **12 routes viejas borradas**: app/api/{purchase,preference,payment,combo}/. comboService.ts borrado completo (lógica reimplementada inline en OrderService.createOrder).
+- **2 reviews críticas pasadas**:
+  - db-migration-reviewer aprobó migration additive con 3 observaciones no-bloqueantes (índices futuros, CHECK constraints futuros, journaling drizzle).
+  - payment-flow-debugger detectó 3 críticos (C1/C2/C3) + 3 importantes (I1/I2/I3) en first-pass del orderService → fixeados en commit `d8ce72f` → re-review aprobado con observación menor sobre logs espurios (no bloqueante).
+  - Final review 7.A por payment-flow-debugger: ✅ APROBADO. Anti-sobreventa intacta, idempotencia preservada, HMAC ok, callbacks UX-only no tocan BD, total server-side, force-dynamic en routes BD, BUG-010 respetado (no bloque env, URLs runtime).
+- **Commits del feature branch (13)**: 590abd7 (worktree), 68a3c11 (schema), 0285416 (migration drizzle), 03b4515 (T4 marker), bffa626 (orderService), 87df2b1 (createOrderPreference), d8ce72f (fix C1/C2/C3+I1/I2/I3), 4492e84 (7 routes), e252d58 (webhook dispatch), 2b67fb4 (cron refactor), 7d07a3f (borrar 12 routes), c501c6c (cleanup services), 3ca1bc0 (T21 tests).
+- **Próxima tarea**: Sub-fase 7.B (UI carrito cross-product). Branch NO MERGEABLE a main hasta 7.B porque UI legacy (RifasApp.tsx + ComboFlow) sigue llamando endpoints viejos borrados → toda compra rompería con 404 si se deployara hoy.
+- **Issues pendientes follow-up no-bloqueantes**:
+  - Logs `ORDER_CANCEL_CHILD_RACE` espurios cuando removeNumberFromOrder vacía un order (cosmética observabilidad, no afecta correctness).
+  - Race teórica entre removeNumberFromOrder y releaseExpiredOrders sobre order pending (probabilidad mínima en práctica — diferido).
+  - Float drift en pricePerNumber (informativa, hoy todos los precios son enteros ARS).
+  - Tests unitarios mínimos (smoke); tests reales en 7.C.
 - **Archivos nuevos**: `.worktrees/fase-7/.eslintrc.json`
 
 ### 2026-05-06 — Save #6 (Fase 5.D cerrada parcial + Fase 6 al 95% en producción)
