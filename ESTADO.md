@@ -6,7 +6,7 @@
 - **Producción**: https://sistema-ventas-rifas-kc5dasqukq-ue.a.run.app (Cloud Run, us-east1)
 - **Última edición productiva**: Septiembre–Octubre 2025 (rifa escolar 2025)
 - **Estado actual**: Reactivación 2026 — proyecto dado de baja al cerrar la rifa anterior, vuelve a levantarse para nueva edición
-- **Última sesión**: 2026-05-05/06 — Fase 5.D (a)+(d) cerrados (merge rediseño UI a main + deploy revision `00013-529`) + Fase 6 implementada al 95% (server-side + UI + deploy revision `00014-9wz` con combos en producción) + cleanup BD (Romi test purchase borrada, precio rifa $2.000 → $1.000). Pendiente: T22 compra real combos $15.000 con tercero.
+- **Última sesión**: 2026-05-06 — Save #7 — Fase 7 al 75% en branch `feature/carrito-unificado` (21 commits). 7.A server-side + 7.B UI + 7.C concurrency tests cerradas con subagent-driven-development (~30 implementers + 4 reviewers, ~5h efectivas). Migration aplicada a Turso productiva (8 tablas). 7.D deploy + smoke real $18.000 con tercero pendiente para próxima sesión. Producción intacta en revision `00014-9wz`.
 - **Versiones previas de la documentación**: `old_docs/` (CLAUDE.md viejo, README, Historial, INTEGRACION_MERCADOPAGO, TUTORIAL_MERCADOPAGO, TEST_CONCURRENCIA)
 
 ---
@@ -89,6 +89,73 @@
 ---
 
 ## Bitácora
+
+### 2026-05-06 — Save #7 (Fase 7 al 75%: 7.A+7.B+7.C completas, 7.D pendiente)
+- **Tareas completadas en sesión**: 7.0 (brainstorm + spec + plan, 13 decisiones) · 7.A (22 tasks server-side, 13 commits) · 7.B (11 tasks UI, 6 commits) · 7.C (5 tasks concurrency tests, 2 commits)
+- **Bugs nuevos**: ninguno productivo. **9 issues pre-merge** detectados por reviewers y fixeados antes de cerrar cada sub-fase: 6 en orderService (C1/C2/C3 + I1/I2/I3 detectados por payment-flow-debugger, fixeados en `d8ce72f`), 4 en UI 7.B (1 critical + 3 important detectados por code reviewer, fixeados en `809f737`), 1 en tests 7.C (Scenario 4 false-green detectado por concurrency-validator, fixeado en `dfea3fb`).
+- **Próxima tarea**: **7.D pre-deploy + deploy + smoke real**:
+  1. Correr `cd .worktrees/fase-7 && npm run dev` + `node test-concurrency.js` 3x (zona limpia 1990-2000) — todas verdes.
+  2. Simular Scenario 2 manual via Turso MCP (INSERT order con `created_at = NOW - 16min` + curl `/api/cron/cleanup` con CRON_SECRET).
+  3. Backup BD productiva via Turso MCP a `backups/rifa-2026-pre-fase7-YYYY-MM-DD.json` (gitignored).
+  4. Capturar revision rollback target: `gcloud run services describe sistema-ventas-rifas --region=us-east1 --format='value(status.latestReadyRevisionName)'` (esperado: `00014-9wz`).
+  5. Merge `feature/carrito-unificado` → main: `git checkout main && git merge --no-ff feature/carrito-unificado` desde repo padre. Cleanup worktree: `git worktree remove .worktrees/fase-7 && git branch -d feature/carrito-unificado && git push origin --delete feature/carrito-unificado`.
+  6. Deploy: `./scripts/deploy.sh` (CRON_SECRET preservado por fix BUG-011).
+  7. Smoke prod automatizado: home HTTP 200 + split hero render OK; POST `/api/order/purchase` con bot data → 200 + orderId; **inspeccionar URLs internas del MP preference vía API** (lección BUG-010): `MP_TOKEN=$(gcloud secrets versions access latest --secret=mp-access-token)` + `curl -H "Authorization: Bearer $MP_TOKEN" /checkout/preferences/{id}` → assert `back_urls` y `notification_url` empiezan con dominio Cloud Run real; `/api/cron/cleanup` con auth → 200, sin auth → 401; webhook con firma inválida → 401.
+  8. Cleanup BD del order de smoke vía Turso MCP (FK-safe order: event_logs → purchase_numbers/combo_purchase_items → raffle_numbers → purchases/combo_purchases → orders).
+  9. **Smoke real cross-product con tercero (Romi probablemente)**: 3 nums + 1 combo = $18.000 (3×$1.000 + 1×$15.000). Coordinar via WhatsApp. NO Rodrigo (seller=buyer bloquea pago).
+  10. Verificar BD post-pago: order approved + purchase approved + combo_purchase approved + raffle_numbers sold para los 3 nums. Comprobante MP con description = "STA - ORD-xxx - 3 nums + 1 combos".
+- **Acciones principales — Brainstorm + spec + plan**:
+  - 13 preguntas con visual companion (2 mockups: split hero options, cart visibility patterns). 13 decisiones cerradas con A/B/C tradeoffs explícitos.
+  - Spec `docs/superpowers/specs/2026-05-06-carrito-unificado-design.md` (556 líneas) commited en main `610a68a`.
+  - Plan `docs/superpowers/plans/2026-05-06-carrito-unificado-fase-7.md` (3.331 líneas, 43 tasks distribuidos en 4 sub-fases) commited en main `691bc8a`.
+- **Acciones principales — Sub-fase 7.A** (server-side, 13 commits en feature branch):
+  - Worktree `.worktrees/fase-7` con branch `feature/carrito-unificado` + `.eslintrc.json` con `root: true`.
+  - Schema reescrito (commit `68a3c11`): tabla `orders` (16 campos) + columnas `order_id` nullable en `purchases`/`combo_purchases`/`event_logs`.
+  - Migration generada por drizzle-kit (`drizzle/0000_handy_callisto.sql`) y validada por `db-migration-reviewer` agent: ⚠️ aprobada con observaciones no-bloqueantes (índices futuros, CHECK constraints).
+  - Migration aplicada a BD productiva via Turso MCP especificando `database='sistema-de-riffas'` (lección sesión 6 — drizzle-kit push se conectaba a BD equivocada). 4 statements: CREATE TABLE orders + 3 ALTER TABLE ADD COLUMN. Verificación post-migration: 8 tablas, 7 cancelled legacy con `order_id NULL`, 0 datos perdidos.
+  - OrderService creado (`bffa626`) con 5 métodos atómicos. Patrón: locks optimistas con `WHERE status=expected` + `.returning()` + check rowsAffected. createOrder dentro de `db.transaction()`.
+  - **payment-flow-debugger first-pass detectó 6 issues críticos**: C1 (cancelOrder sin race detection en hijas), C2 (removeNumberFromOrder UPDATE sin guard purchaseId — race condition), C3 (releaseExpiredOrders filtraba `hasRaffle=true` dejando combo-only orders huérfanas eternas), I1+I2 (confirmOrderPayment no diferenciaba race transitorio vs estado terminal — order ya cancelled + webhook approved generaba loop 503 con MP, dinero cobrado sin números), I3 (removeNumberFromOrder al vaciar order no cancelaba hijas combo). Fix integrado en commit `d8ce72f` con `_cancelOrderInTx` helper privado para reutilización segura desde `removeNumberFromOrder`. Re-review aprobado.
+  - createOrderPreference en `lib/mercadopago.ts` (`87df2b1`): URLs runtime con `baseUrl env`, items mixtos (rifa 1 item agregado + N items por tipo combo).
+  - 7 routes nuevas `/api/order/*` (`4492e84`): purchase, cancel, items DELETE, preference, payment/{success,failure,pending}.
+  - Webhook dispatch refactor (`e252d58`): rama ORD- llama OrderService, ramas PUR-/COM- log + 200 retrocompat (no procesan).
+  - Cron `/api/cron/cleanup` migrado (`2b67fb4`).
+  - 12 routes viejas borradas (`7d07a3f`): `/api/purchase`, `/api/preference`, `/api/payment/*`, `/api/combo/*`.
+  - Cleanup services (`c501c6c`): comboService.ts borrado entero, raffleService.ts trimmeado a 3 funciones (las que tienen consumers en `/api/numbers`, `/api/numbers/verify`, `/api/raffle/config`).
+  - Final review 7.A por payment-flow-debugger: ✅ APROBADO. Anti-sobreventa intacta, idempotencia preservada, HMAC ok, callbacks UX-only no tocan BD, total server-side, BUG-010 respetado.
+- **Acciones principales — Sub-fase 7.B** (UI, 6 commits en feature branch):
+  - 7 componentes nuevos (`38bf49c`): StickyCartBar (always-visible bottom bar tappable), CartDrawer (mini-carrito con × por número y stepper por combo), CrossSellSheet (bottom sheet pre-form), UnifiedBuyerForm (form adaptativo 6 o 3 campos), UnifiedReview (breakdown rifa+combos+buyer), OrderSuccessScreen (genérico con orderId + WhatsApp share), OrderFlow (orchestrator) — pendiente en `c62bdb9`.
+  - NumberGrid migrado a multi-select cap 10 con check icon en NumberCell.
+  - RifasApp slim shell (`1f654d3`): delega a `<OrderFlow>` después del split hero. Polling 30s preservado en RifasApp.
+  - 7 componentes viejos borrados (`37d3977`): ComboFlow, ComboBuyerForm, ComboReview, ComboSuccessScreen, PurchaseReview, BuyerForm, SuccessScreen. -742 líneas.
+  - **Final code reviewer detectó 1 critical (double PageContainer en ComboCatalog cuando montado desde OrderFlow) + 3 important** (precio combo $15.000 hardcoded en ProductSplitHero, 12 botones sin `type="button"`, error banner usaba `bg-red-50` en vez de tokens `state-sold`). Fixeados pre-cierre en `809f737` con derivación dinámica de precio desde `COMBOS[0].price` y migración a tokens del design system.
+  - Bundle home `/`: 7.15 → 10.3 kB (+3 kB justificado por OrderFlow + 7 componentes nuevos + lógica carrito).
+- **Acciones principales — Sub-fase 7.C** (concurrency tests, 2 commits en feature branch):
+  - test-concurrency.js completamente reescrito (`a3f3f50`) apuntando a `/api/order/*` port 3000 con zona nums 1990-2000 (zone segura, baja probabilidad de uso real). Healthcheck startup que aborta si dev server no está activo.
+  - 2 scenarios automatizados: Scenario 1 (2 users overlap nums + cross-product, espera exactamente 1 success), Scenario 4 (4 users overlapping cross-product, espera 0 sobreventa).
+  - 2 scenarios manuales documentados: Scenario 2 (cleanup vs webhook, requiere clock mocking via Turso MCP), Scenario 3 (removeNumberFromOrder vs webhook, requiere HMAC simulator — diferido a post-deploy monitoring).
+  - simple-test.js + run-concurrency-test.js borrados (apuntaban a routes ya borradas en T19).
+  - test-concurrency.legacy.js archivado como referencia histórica.
+  - **concurrency-validator first-pass** detectó Scenario 4 false-green: el `ok('PASSED')` se ejecutaba incondicionalmente sin chequear duplicados. Fix en `dfea3fb`: assertion real validando unión de numberIds.
+  - **Veredicto del validator**: ⚠️ APROBADO CON OBSERVACIONES. Code review confirma anti-sobreventa preservada en los 5 métodos del orderService. **Review estático insuficiente per CLAUDE.md** ("NUNCA aprobar sin correr tests 3x"). Tests deben ejecutarse en 7.D pre-deploy contra dev server con zona limpia.
+- **Decisiones de diseño tomadas (todas en sesión 7.0 brainstorm)**:
+  - 13 decisiones cerradas (ver MEMORIA.md sección "Decisiones de diseño locked en sesión 7").
+  - **Workflow subagent-driven con review-fix-rereview** funcionó bien: capturó 9 issues que sin reviewer hubieran llegado a producción (6 en orderService + 1 en UI + 1 en tests + 1 minor de validator).
+  - **No-ejecutar tests live en 7.C**: precedente Fase 5.D/6.B (skip sandbox smoke, validar con compra real). 7.D pre-deploy hace los runs.
+- **Archivos modificados / creados** (totales sesión, ~50 archivos):
+  - **Spec/plan** (en main): `docs/superpowers/specs/2026-05-06-carrito-unificado-design.md` (nuevo, 556 líneas), `docs/superpowers/plans/2026-05-06-carrito-unificado-fase-7.md` (nuevo, 3.331 líneas).
+  - **Schema/migration** (feature branch): `lib/db/schema.ts` (refactoreado), `drizzle/0000_handy_callisto.sql` (nuevo, referencia — migration aplicada manualmente via MCP).
+  - **Services** (feature branch): `lib/services/orderService.ts` (nuevo, ~470 líneas), `lib/services/raffleService.ts` (trimmed), `lib/services/comboService.ts` (borrado), `lib/mercadopago.ts` (createOrderPreference reemplaza viejas), `lib/combos.ts` (sin cambios).
+  - **Routes** (feature branch): 7 nuevas en `app/api/order/`, 12 borradas (`app/api/{purchase,preference,payment,combo}/*`), `app/api/webhooks/mercadopago/route.ts` (dispatch refactor), `app/api/cron/cleanup/route.ts` (refactor).
+  - **UI** (feature branch): 7 componentes nuevos en `components/{cart,cross-sell,order}/`, NumberGrid + NumberCell + RifasApp + FailureScreen + PendingScreen modificados, 7 viejos borrados.
+  - **Tests** (feature branch): test-concurrency.js reescrito, simple-test.js + run-concurrency-test.js borrados, test-concurrency.legacy.js archivado.
+  - **Meta** (en main): ESTADO.md, MEMORIA.md (este save).
+- **Notas críticas para próxima sesión**:
+  - **Branch `feature/carrito-unificado` con 21 commits NO mergeable a main** hasta validar 7.D pre-deploy (los 3 runs de concurrency tests + scenario 2 manual).
+  - **BD productiva ya migrada** (8 tablas con `orders` nueva). Si rollback es necesario después del deploy, las nuevas tablas y columnas pueden quedar sin uso (additive only). El revert es del código + redeploy a revision `00014-9wz` target.
+  - **Compra real $18.000 cross-product requiere tercero** (Romi probablemente). NO Rodrigo (seller=buyer bloqueado por MP). Coordinar via WhatsApp pre-deploy.
+  - **Smoke prod automatizado debe inspeccionar URLs internas del MP preference vía MP API** — sin esto un BUG-010-like quedaría oculto hasta compra real.
+  - **Cualquier cambio en orderService durante 7.D requiere re-correr concurrency tests 3x antes de merge**.
+- **Stats sesión**: ~5h efectivas, 21 commits feature branch + 5 commits docs/state en main = 26 commits totales, ~30 implementer subagents (haiku/sonnet) + 4 reviewers (db-migration-reviewer ×1, payment-flow-debugger ×3, concurrency-validator ×1, code-quality reviewer general-purpose ×1), 9 issues capturados pre-merge, 0 cargo extra GCP, producción intacta.
 
 ### 2026-05-06 — Sub-fase 7.C completa (concurrency tests cross-product)
 - **Tareas completadas**: 7.C T34-T38 (5 tasks).
