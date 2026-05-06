@@ -63,6 +63,7 @@ export class ComboService {
 
       await tx.insert(eventLogs).values({
         eventType: 'COMBO_PURCHASE_CREATED',
+        purchaseId: comboPurchaseId,
         data: JSON.stringify({ totalAmount, itemsCount, items: validItems }),
       });
 
@@ -155,6 +156,7 @@ export class ComboService {
       if (result.rowsAffected === 0) {
         await tx.insert(eventLogs).values({
           eventType: 'COMBO_PAYMENT_CONFLICT',
+          purchaseId: params.comboPurchaseId,
           data: JSON.stringify({
             purchaseId: params.comboPurchaseId,
             paymentId: params.paymentId,
@@ -166,6 +168,7 @@ export class ComboService {
 
       await tx.insert(eventLogs).values({
         eventType: 'COMBO_PAYMENT_CONFIRMED',
+        purchaseId: params.comboPurchaseId,
         data: JSON.stringify({
           purchaseId: params.comboPurchaseId,
           paymentId: params.paymentId,
@@ -203,6 +206,7 @@ export class ComboService {
 
       await tx.insert(eventLogs).values({
         eventType: 'COMBO_PAYMENT_CANCELLED',
+        purchaseId: params.comboPurchaseId,
         data: JSON.stringify({
           purchaseId: params.comboPurchaseId,
           reason: params.reason,
