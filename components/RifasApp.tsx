@@ -1,17 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import PageContainer from './layout/PageContainer';
 import ProductSplitHero from './hero/ProductSplitHero';
-import NumberGrid from './grid/NumberGrid';
-import BuyerForm from './form/BuyerForm';
-import PurchaseReview from './review/PurchaseReview';
-import SuccessScreen from './status/SuccessScreen';
-import FailureScreen from './status/FailureScreen';
-import PendingScreen from './status/PendingScreen';
-import ComboFlow from './combos/ComboFlow';
+import OrderFlow from './order/OrderFlow';
 
-// === Types ===
+// === Re-exported types (kept for backward-compat while old components still exist) ===
 
 export interface RaffleConfig {
   id: number;
@@ -38,43 +32,29 @@ export interface FormData {
 
 export type Step = 'hero' | 'grid' | 'form' | 'review' | 'success' | 'failure' | 'pending';
 
-const EMPTY_FORM: FormData = {
-  buyerName: '',
-  email: '',
-  phone: '',
-  studentName: '',
-  course: '',
-  division: '',
-};
+// ===
 
 const POLLING_INTERVAL_MS = 30000;
 
-
 export default function RifasApp() {
-  // === State ===
-  const [view, setView] = useState<'home' | 'rifa' | 'combo'>('home');
+  const [view, setView] = useState<'home' | 'order'>('home');
+  const [entry, setEntry] = useState<'rifa' | 'combo'>('rifa');
   const [raffleConfig, setRaffleConfig] = useState<RaffleConfig | null>(null);
   const [numbers, setNumbers] = useState<RaffleNumber[]>([]);
-  const [selectedNumber, setSelectedNumber] = useState<number | null>(null);
-  const [currentStep, setCurrentStep] = useState<Step>('grid');
-  const [formData, setFormData] = useState<FormData>(EMPTY_FORM);
-  const [purchaseId, setPurchaseId] = useState<string | null>(null);
-  const [paymentId, setPaymentId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  // Combo flow — initial step + order code set from MP redirect query params
-  const [comboInitialStep, setComboInitialStep] = useState<'catalog' | 'success' | 'failure' | 'pending' | null>(null);
-  const [comboInitialOrderCode, setComboInitialOrderCode] = useState<string | null>(null);
+  const [paymentStatus, setPaymentStatus] = useState<'success' | 'failure' | 'pending' | undefined>();
+  const [orderId, setOrderId] = useState<string | undefined>();
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  // === API wrappers ===
   const loadConfig = useCallback(async () => {
     try {
       const res = await fetch('/api/raffle/config', { cache: 'no-store' });
       if (!res.ok) throw new Error(`Config ${res.status}`);
-      setRaffleConfig(await res.json());
+      const data = (await res.json()) as RaffleConfig;
+      setRaffleConfig(data);
     } catch (e) {
       console.error('loadConfig:', e);
-      setError('No pudimos cargar la información de la rifa.');
+      setLoadError('No pudimos cargar la información de la rifa.');
     }
   }, []);
 
@@ -89,195 +69,48 @@ export default function RifasApp() {
       setNumbers(data);
     } catch (e) {
       console.error('loadNumbers:', e);
-      setError('No pudimos cargar los números. Reintentá en unos segundos.');
     }
   }, []);
 
-  const createPurchase = useCallback(async (data: FormData, number: number, totalAmount: number) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const res = await fetch('/api/purchase', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          buyerName: data.buyerName,
-          studentName: data.studentName,
-          division: data.division,
-          course: data.course,
-          email: data.email,
-          phone: data.phone,
-          numbers: [number],
-          totalAmount,
-        }),
-      });
-      const body = await res.json();
-      if (!res.ok || !body.success) {
-        throw new Error(body.error || 'No se pudo reservar el número');
-      }
-      setPurchaseId(body.purchaseId as string);
-      setCurrentStep('review');
-    } catch (e) {
-      console.error('createPurchase:', e);
-      setError(e instanceof Error ? e.message : 'Error al crear la compra');
-      await loadNumbers();
-      setCurrentStep('grid');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [loadNumbers]);
-
-  const startPayment = useCallback(async () => {
-    if (!purchaseId || !selectedNumber || !raffleConfig) return;
-    setIsLoading(true);
-    setError(null);
-    try {
-      const res = await fetch('/api/preference', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          purchaseId,
-          buyerName: formData.buyerName,
-          email: formData.email,
-          numbers: [selectedNumber],
-          totalAmount: raffleConfig.pricePerNumber,
-        }),
-      });
-      const body = await res.json();
-      if (!res.ok || !body.success || !body.initPoint) {
-        throw new Error(body.error || 'No se pudo iniciar el pago');
-      }
-      window.location.href = body.initPoint as string;
-    } catch (e) {
-      console.error('startPayment:', e);
-      setError(e instanceof Error ? e.message : 'Error al iniciar el pago');
-      setIsLoading(false);
-    }
-  }, [purchaseId, selectedNumber, raffleConfig, formData]);
-
-  // === Effects ===
-
-  // Initial load + polling
+  // Initial load
   useEffect(() => {
-    loadConfig();
-    loadNumbers();
-    const id = setInterval(loadNumbers, POLLING_INTERVAL_MS);
-    return () => clearInterval(id);
+    Promise.all([loadConfig(), loadNumbers()]).finally(() => setIsLoading(false));
   }, [loadConfig, loadNumbers]);
 
-  // Detect status redirect from MP callback
-  // Combo params: ?combo=success|failure|pending&order=COM-xxx
-  // Rifa params:  ?payment=success|failure|pending&purchase=PUR-xxx
+  // Polling
+  useEffect(() => {
+    const id = setInterval(loadNumbers, POLLING_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [loadNumbers]);
+
+  // Query params post-MP redirect
+  // New unified format: ?payment=success|failure|pending&order=ORD-xxx
+  // Legacy combo format: ?combo=success|failure|pending&order=COM-xxx (handled by same branch)
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
 
-    // --- Combo branch (check first) ---
-    const comboStatus = params.get('combo');
+    // Unified order redirect: ?payment=...&order=ORD-xxx
+    const ps = params.get('payment') as 'success' | 'failure' | 'pending' | null;
     const order = params.get('order');
-    if (comboStatus && order) {
-      setView('combo');
-      setComboInitialStep(comboStatus as 'success' | 'failure' | 'pending');
-      setComboInitialOrderCode(order);
-      window.history.replaceState({}, '', '/');
+    if (ps && order) {
+      setPaymentStatus(ps);
+      setOrderId(order);
+      setView('order');
+      // Query params are cleaned up inside OrderFlow on mount
       return;
     }
 
-    // --- Rifa branch ---
-    const payment = params.get('payment');
+    // Legacy rifa-only redirect: ?payment=...&purchase=PUR-xxx
     const purchase = params.get('purchase');
-    const pid = params.get('payment_id');
-    if (payment === 'success' && purchase) {
-      setPurchaseId(purchase);
-      if (pid) setPaymentId(pid);
-      setCurrentStep('success');
-    } else if (payment === 'failure' && purchase) {
-      setPurchaseId(purchase);
-      setCurrentStep('failure');
-    } else if (payment === 'pending' && purchase) {
-      setPurchaseId(purchase);
-      if (pid) setPaymentId(pid);
-      setCurrentStep('pending');
-    }
-    if (payment) {
-      window.history.replaceState({}, '', '/');
+    if (ps && purchase) {
+      setPaymentStatus(ps);
+      setOrderId(purchase);
+      setView('order');
     }
   }, []);
 
-  // === Step actions ===
-
-  const goToGrid = useCallback(() => {
-    setError(null);
-    setCurrentStep('grid');
-  }, []);
-
-  const goToForm = useCallback(() => {
-    if (!selectedNumber) return;
-    setError(null);
-    setCurrentStep('form');
-  }, [selectedNumber]);
-
-  const goToReview = useCallback(async (latestForm: FormData) => {
-    if (!selectedNumber || !raffleConfig) return;
-    await createPurchase(latestForm, selectedNumber, raffleConfig.pricePerNumber);
-  }, [selectedNumber, raffleConfig, createPurchase]);
-
-  const goBack = useCallback(() => {
-    setError(null);
-    if (currentStep === 'grid') {
-      setView('home');
-      setCurrentStep('grid'); // reset so re-entering rifa always starts at grid
-    } else if (currentStep === 'form') setCurrentStep('grid');
-    else if (currentStep === 'review') setCurrentStep('form');
-  }, [currentStep]);
-
-  const restart = useCallback(() => {
-    setSelectedNumber(null);
-    setFormData(EMPTY_FORM);
-    setPurchaseId(null);
-    setPaymentId(null);
-    setError(null);
-    setCurrentStep('grid');
-    setView('home');
-    if (typeof window !== 'undefined') {
-      window.history.replaceState({}, '', '/');
-    }
-    loadNumbers();
-  }, [loadNumbers]);
-
-  const shareWhatsApp = useCallback(() => {
-    if (!selectedNumber || !raffleConfig) return;
-    const text = `¡Tengo el número ${String(selectedNumber).padStart(4, '0')} en ${raffleConfig.title}! 🎟`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
-  }, [selectedNumber, raffleConfig]);
-
-  // === Render ===
-
-  // === View branching ===
-
-  if (view === 'home') {
-    const totalAvailable = numbers.filter((n) => n.status === 'available').length;
-    return (
-      <ProductSplitHero
-        raffleAvailable={raffleConfig ? totalAvailable : null}
-        rafflePrice={raffleConfig?.pricePerNumber ?? null}
-        onSelect={(product) => setView(product)}
-      />
-    );
-  }
-
-  if (view === 'combo') {
-    return (
-      <ComboFlow
-        onExit={() => setView('home')}
-        initialStep={comboInitialStep ?? 'catalog'}
-        initialOrderCode={comboInitialOrderCode}
-      />
-    );
-  }
-
-  // view === 'rifa' — fall through to wizard JSX
-  if (!raffleConfig) {
+  if (isLoading) {
     return (
       <PageContainer>
         <div className="flex-1 flex items-center justify-center text-ink-muted text-sm">
@@ -287,55 +120,44 @@ export default function RifasApp() {
     );
   }
 
+  if (loadError || !raffleConfig) {
+    return (
+      <PageContainer>
+        <div className="flex-1 flex items-center justify-center text-red-600 text-sm px-4 text-center">
+          {loadError ?? 'No se pudo cargar la rifa. Recargá la página.'}
+        </div>
+      </PageContainer>
+    );
+  }
+
+  if (view === 'home') {
+    const totalAvailable = numbers.filter((n) => n.status === 'available').length;
+    return (
+      <ProductSplitHero
+        raffleAvailable={totalAvailable}
+        rafflePrice={raffleConfig.pricePerNumber}
+        onSelect={(product) => {
+          setEntry(product);
+          setView('order');
+        }}
+      />
+    );
+  }
+
+  // view === 'order'
   return (
-    <PageContainer>
-      {currentStep === 'grid' && (
-        <NumberGrid
-          numbers={numbers}
-          totalNumbers={raffleConfig.totalNumbers}
-          selectedNumber={selectedNumber}
-          pricePerNumber={raffleConfig.pricePerNumber}
-          onSelect={setSelectedNumber}
-          onContinue={goToForm}
-          onBack={goBack}
-        />
-      )}
-      {currentStep === 'form' && (
-  <BuyerForm
-    initialValue={formData}
-    isSubmitting={isLoading}
-    errorMessage={error}
-    onSubmit={(data) => {
-      setFormData(data);
-      void goToReview(data);
-    }}
-    onBack={goBack}
-  />
-)}
-      {currentStep === 'review' && selectedNumber !== null && (
-        <PurchaseReview
-          selectedNumber={selectedNumber}
-          pricePerNumber={raffleConfig.pricePerNumber}
-          formData={formData}
-          isPaying={isLoading}
-          errorMessage={error}
-          onPay={startPayment}
-          onBack={goBack}
-        />
-      )}
-      {currentStep === 'success' && (
-        <SuccessScreen
-          number={selectedNumber ?? undefined}
-          email={formData.email}
-          raffleTitle={raffleConfig.title}
-          onShareWhatsApp={shareWhatsApp}
-          onRestart={restart}
-        />
-      )}
-      {currentStep === 'failure' && (
-        <FailureScreen number={selectedNumber} onRestart={restart} />
-      )}
-      {currentStep === 'pending' && <PendingScreen onRestart={restart} />}
-    </PageContainer>
+    <OrderFlow
+      initialEntry={entry}
+      raffleConfig={raffleConfig}
+      numbers={numbers}
+      onBack={() => {
+        setView('home');
+        setPaymentStatus(undefined);
+        setOrderId(undefined);
+      }}
+      initialPaymentStatus={paymentStatus}
+      initialOrderId={orderId}
+      refreshNumbers={loadNumbers}
+    />
   );
 }
