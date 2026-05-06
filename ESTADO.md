@@ -6,7 +6,7 @@
 - **Producción**: https://sistema-ventas-rifas-kc5dasqukq-ue.a.run.app (Cloud Run, us-east1)
 - **Última edición productiva**: Septiembre–Octubre 2025 (rifa escolar 2025)
 - **Estado actual**: Reactivación 2026 — proyecto dado de baja al cerrar la rifa anterior, vuelve a levantarse para nueva edición
-- **Última sesión**: 2026-05-04 — Fase 2 cerrada (rifa 2026 configurada en BD productiva: 2.000 números a $2.000) + fix BUG-009 (loop infinito useEffect oculto por 8 meses)
+- **Última sesión**: 2026-05-05/06 — Fase 5.D (a)+(d) cerrados (merge rediseño UI a main + deploy revision `00013-529`) + Fase 6 implementada al 95% (server-side + UI + deploy revision `00014-9wz` con combos en producción) + cleanup BD (Romi test purchase borrada, precio rifa $2.000 → $1.000). Pendiente: T22 compra real combos $15.000 con tercero.
 - **Versiones previas de la documentación**: `old_docs/` (CLAUDE.md viejo, README, Historial, INTEGRACION_MERCADOPAGO, TUTORIAL_MERCADOPAGO, TEST_CONCURRENCIA)
 
 ---
@@ -65,7 +65,7 @@
 - [x] 5.A Fundamentos: tailwind tokens + Inter font + 3 layout components (PageContainer, AppHeader, StickyBottomBar). 9 commits en main. Plan: `docs/superpowers/plans/2026-05-05-rediseno-ui-fase-5a-fundamentos.md` - DEV
 - [x] 5.B Pantallas públicas (Hero + Grid paginada + Form + Review + Success/Failure/Pending). RifasApp 1.587 → 237 líneas; 13 componentes nuevos; bundle `/` 9.22 → 7.15 kB. 13 commits en feature branch `rediseno-ui/fase-5b` (sin mergear a main todavía). Plan: `docs/superpowers/plans/2026-05-05-rediseno-ui-fase-5b-pantallas-publicas.md` - DEV
 - [ ] 5.C Panel admin con basic auth + 3 tabs + export CSV - DEV
-- [ ] 5.D Validación: smoke iPhone Safari + Android Chrome + desktop Chrome + concurrency test + merge feature branch + deploy + compra real - TEST
+- [~] 5.D Validación: (a) merge feature branch + (d) deploy + smoke prod ✅ cerrados 2026-05-05. Concurrency test (c) skipped (UI no toca raffleService). Smoke mobile real (b) y compra real (e) pendientes — la compra real se absorbe en T22 de Fase 6 con tercero - TEST
 - [ ] 5.E Logo STA y hex institucionales reales aplicados (cuando los pase el usuario) - DEV
 
 ### Fase 6: Combos del evento (venta online MP)
@@ -74,12 +74,83 @@
 - [x] 6.0 Spec aprobado (2026-05-05) - DEV
 - [x] 6.A Server-side: schema + service + APIs + webhook dispatch - DEV
 - [x] 6.B UI: ProductSplitHero + ComboFlow + 5 componentes nuevos - DEV
-- [ ] 6.C Sandbox MP smoke E2E - TEST
-- [ ] 6.D Deploy + compra real $15.000 - TEST
+- [x] ~~6.C Sandbox MP smoke E2E~~ **SKIPPED 2026-05-06** por decisión del usuario — precedente Fase 5.D (BUG-010 fue detectado por compra real, sandbox no lo había detectado). Validación se mueve a 6.D compra real.
+- [~] 6.D Deploy ✅ cerrado (revision `sistema-ventas-rifas-00014-9wz`, smoke prod verde con split hero render OK + 4 routes /api/combo/* + CRON_SECRET preservado). **Pendiente compra real $15.000 con tercero (T22)** — no Rodrigo por seller=buyer (lección 2026-05-04). Coordinar con Romi - TEST
+
+### Fase 7: Carrito unificado rifa + combos (2026-05-06 — pendiente brainstorm)
+> Pedido del usuario al cierre de Fase 6: que un mismo comprador pueda agregar N números de rifa + N combos en un mismo carrito y pagar todo en una sola transacción MP. Esto invierte la decisión "compra cross-product = NO" de Fase 6 sección 2 y reactiva multi-selección de números (la rifa 2025 lo soportaba, Fase 5.B lo restringió a 1 por compra).
+
+- [ ] 7.0 Brainstorming + spec (próxima sesión) — temas a cerrar: schema (relación rifa_numbers + combo_items en una "compra padre"), concurrencia (timeout reserva rifa 15min vs combos sin timeout — qué pasa si user tarda y se vence), webhook dispatch atómico (ambos sub-flows o uno solo), UI (split hero pierde sentido), MP preference items mezclados, naming (`PUR-` / `COM-` / nuevo `ORD-`), cleanup soft - DEV
+- [ ] 7.A Schema + service unificado - DEV
+- [ ] 7.B UI carrito cross-product - DEV
+- [ ] 7.C Tests concurrencia (CRÍTICO — patrón rifa intacto) - TEST
+- [ ] 7.D Deploy + compra real - TEST
 
 ---
 
 ## Bitácora
+
+### 2026-05-06 — Save #6 (Fase 5.D cerrada parcial + Fase 6 al 95% en producción)
+- **Tareas completadas**: 5.D paso (a) merge feature branch + (d) deploy revision `00013-529` · cleanup BD (Romi test purchase borrada, precio rifa $2000→$1000) · Fase 6 brainstorm + spec + plan · 6.A 100% (server-side completo, 12 commits) · 6.B 100% (UI completa, 6 commits) · 6.D parte deploy (revision `00014-9wz` con combos en producción)
+- **Tareas en progreso**: T22 compra real combos $15.000 (requiere tercero con cuenta MP distinta) · 5.E logo STA pendiente
+- **Bugs cerrados**: ninguno nuevo. **1 desviación de spec detectada y fixeada** durante T5: implementer omitió `purchaseId` en eventLogs porque asumió que la FK fallaría runtime — payment-flow-debugger reviewer confirmó que SQLite/libsql no enforce FKs por default y la rifa hace exactamente eso en producción. Fix en commit `7902ac4` agregando `purchaseId: comboPurchaseId` a las 4 inserts.
+- **Próxima tarea**: T22 compra real combos con tercero, Y SEPARADAMENTE arrancar **Fase 7 brainstorm carrito unificado** (pedido del usuario al cierre — invertir decisión "no cross-product" de Fase 6).
+- **Acciones principales — Fase 5.D paso (a)+(d)**:
+  - Merge `--no-ff` de `rediseno-ui/fase-5b` a main (commit `dc0d556`), 13 commits del feature integrados
+  - Cleanup worktree + branches (local + remote)
+  - Fix `scripts/deploy.sh` agregando `CRON_SECRET=cron-secret:latest` al `--set-secrets` (commit `b50abc0`). Razón: desde revision `00010-jlz` el CRON_SECRET se perdía en cada deploy porque `--set-secrets` reemplaza la lista completa, y el SECRET había sido agregado out-of-band con `--update-secrets` en el setup de Cloud Scheduler 2026-05-04. Resultado: `/api/cron/cleanup` quedó fail-open por 3 revisiones (la lógica `if (cronSecret && ...)` saltea validación cuando undefined). Fix preservó CRON_SECRET en deploys posteriores.
+  - Deploy a Cloud Run revision `sistema-ventas-rifas-00013-529` con UI Fase 5.B en producción
+- **Acciones principales — Cleanup BD pre-Fase 6**:
+  - Decisión usuario: precio rifa $2.000 → $1.000, borrar Romi test purchase
+  - Vía Turso MCP en orden FK-safe: DELETE purchase_numbers + event_logs `purchase_id='PUR-bv13rkdfQQ'` + UPDATE raffle_numbers id=2001 a available + DELETE purchase + UPDATE raffles set price_per_number=1000. Cancelled purchases históricas (7) intactas como audit trail.
+  - Verificación post-cleanup: 2.000/2.000 raffle_numbers available, 0 sold, 0 reserved, price_per_number=1000 confirmado en API productiva
+- **Acciones principales — Fase 6.0 brainstorm + spec + plan**:
+  - 5 secciones de diseño aprobadas con visual companion (3 mockups: tab pattern, combo picker, etc.)
+  - Decisiones cerradas: split entry hero (2 cards Rifa/Combo) · stock ilimitado · carrito multi-combo · 1 transacción MP por carrito · datos solo del comprador (sin estudiante) · catálogo hardcoded en `lib/combos.ts` · stepper rows compactos · tablas separadas `combo_purchases` + `combo_purchase_items` · webhook único con dispatch por prefijo `external_reference` · event types con prefijo `COMBO_`
+  - Spec en `docs/superpowers/specs/2026-05-05-combos-evento-design.md` (363 líneas) con self-review aplicado
+  - Plan en `docs/superpowers/plans/2026-05-05-combos-evento-fase-6.md` (2.524 líneas, 22 tasks distribuidos en 4 sub-fases)
+- **Acciones principales — Fase 6.A server-side** (12 commits):
+  - T1 `02cbead` worktree `feature/combos-evento` + ESTADO.md
+  - T2 `be8ecb0` `lib/combos.ts` constant catalog + 6 unit tests TDD (chorizo/carne/empanadas a $15.000)
+  - T3 `04b3430` Drizzle schema additions (`comboPurchases` + `comboPurchaseItems`) + migration generated. Bonus: tsconfig target `es5 → es2020` (drizzle-kit lo requería)
+  - T4 `dec3699` migration aplicada a Turso productivo. **Desvío del plan**: drizzle-kit push se conectó a BD equivocada (`planificador-docente`) por bug shell env contaminada (TURSO_DATABASE_URL exportada en shell, dotenv 17 no override por default — lección 2026-05-04 ya documentada). Mitigación: aplicación manual via Turso MCP de los 2 CREATE TABLE sin afectar las 5 existentes. Verificado post-apply: 7 tablas, 5 existentes intactas con counts esperados.
+  - T5 `4bd78da` + `7902ac4` `lib/services/comboService.ts` con createComboPurchase + confirmComboPayment + cancelComboPayment idempotentes (optimistic locks `WHERE payment_status='pending'`). Spec deviation detectada por reviewer: el implementer había omitido `purchaseId` en eventLogs por asumir FK enforcement. Fix agregando purchaseId a las 4 inserts.
+  - T6 `5cc0d67` `createComboPreference` helper en `lib/mercadopago.ts`. Multi-item, back_urls a Cloud Run real, description con COM-code visible en comprobante MP. Sin auto_return (workaround sandbox-MP).
+  - T7-T10 `bb33859`/`6792d40`/`3d27703`/`12810ca` 4 API routes (`/api/combo/{purchase,preference,cancel,payment/{success,failure,pending}}`). Zod validation, total recalculado server-side anti-tampering, 503 si MP API falla, 409 si purchase no en pending.
+  - T11 `2a91861` webhook MP dispatch por prefijo `external_reference`. Refactor de `handlePaymentNotification` a `handleRifaPayment` + `handleComboPayment`. HMAC + 5xx + idempotencia intactos. Validado por `payment-flow-debugger` agent: rifa flow line-for-line idéntico, cero regresión.
+  - T12 `3da498d` cierre Fase 6.A — 10/10 unit tests pass, lint+build verde
+- **Acciones principales — Fase 6.B UI** (6 commits):
+  - T13 `60f5b11` `<ProductSplitHero>` (2 cards Rifa/Combo en home) + RifasApp `view: 'home'|'rifa'|'combo'` state + delete `<HeroLanding>`. Tokens: `border-line` reemplaza inexistente `ink-faint`; `text-ink-soft` para icono no-activo del combo card.
+  - T14 `5055cdf` `<ComboRow>` memoized + `<ComboCatalog>` con StickyBottomBar showing total
+  - T15 `8f3029c` `<ComboBuyerForm>` 3 campos. **Adaptación**: FormField tiene signature `onChange(name, value)` no `onChange(value)`; implementer agregó handler unificado.
+  - T16 `c11ae08` `<ComboReview>` breakdown items + total + buyer + CTA pagar MP con loading state
+  - T17 `7011ee5` `<ComboSuccessScreen>` con COM-xxxx grande + breakdown items + share WhatsApp. `<FailureScreen>` y `<PendingScreen>` con prop opcional `productType`. **Detalle**: prop callback es `onRestart` único, no separado en `onRetry`/`onHome`.
+  - T18 `1a2ebd0` `<ComboFlow>` orchestrator wires catalog→form→review→MP→status. RifasApp consume query params `?combo=success&order=COM-xxx` en mount, limpia URL via `replaceState` (patrón fix I-1 Fase 5.B).
+  - T19 `625fa5a` cierre Fase 6.B — lint clean, build verde, todas las routes combo registradas en bundle
+- **Acciones principales — Fase 6.D deploy + smoke prod**:
+  - Pre-deploy: rollback target capturado `sistema-ventas-rifas-00013-529`
+  - Merge `--no-ff` a main (commit `4309b5d`), 20 commits del feature branch + 2 closures integrados
+  - Push origin/main + cleanup worktree + branches
+  - `./scripts/deploy.sh` → revision `sistema-ventas-rifas-00014-9wz` sirviendo 100% del tráfico
+  - **Smoke prod verde**: home HTTP 200 (636ms) con split hero render OK ("Apoyá el evento" + 2 cards), `/api/raffle/config` retorna $1.000/2000 nums, `/api/cron/cleanup` 401 (auth enforced), `/api/combo/cancel` 400 sin body (Zod working), 8 env secrets presentes incluyendo CRON_SECRET
+- **Workflow nuevo aplicado**: subagent-driven-development con haiku para tasks mecánicas (T2, T3, T6, T7-T10, T13, T14-T17 batched), sonnet para integration (T5, T11, T13, T18). 22 implementer subagents + 1 db-migration-reviewer + 1 spec-compliance reviewer + 1 code-quality reviewer + 1 payment-flow-debugger reviewer. Único retry fue T5 fix de purchaseId. Total ~6h efectivas en sesión.
+- **Decisiones de diseño tomadas**:
+  - Permisos de Bash expandidos a read-only commands (`cat`, `ls`, `cd`, `git diff/log/status/worktree`, `find`, `grep`, `node --test`, `npm run lint/build/db:*`, etc.) en `.claude/settings.local.json`. Limitación descubierta: backslash-escaped whitespace y `cd path && cmd 2>/dev/null` triggerean prompts de seguridad **independientes** del allow list. Mitigación: instruir subagentes a usar comillas dobles + evitar redirections en compound commands.
+  - Para evitar el bug shell env contaminada con TURSO_DATABASE_URL, aplicar migrations manualmente via Turso MCP en vez de drizzle-kit push (cuando se sabe que el shell del dev tiene la var contaminada).
+  - Pedido al cierre: usuario quiere **carrito unificado rifa + combos** en una sola compra MP — invertir decisión "no cross-product" de Fase 6 sección 2. Spec/plan aparte en próxima sesión (Fase 7).
+- **Archivos modificados / creados** (totales sesión, ~60 archivos):
+  - **Server-side**: `lib/db/schema.ts` (+2 tablas), `lib/services/comboService.ts` (nuevo), `lib/combos.ts` (nuevo), `lib/mercadopago.ts` (+createComboPreference), `app/api/combo/*` (6 routes nuevas), `app/api/webhooks/mercadopago/route.ts` (dispatch añadido)
+  - **UI**: `components/hero/ProductSplitHero.tsx` (nuevo), `components/hero/HeroLanding.tsx` (borrado), `components/combos/{ComboFlow,ComboCatalog,ComboRow,ComboBuyerForm,ComboReview}.tsx` (nuevos), `components/status/{ComboSuccessScreen.tsx (nuevo), FailureScreen.tsx (+prop), PendingScreen.tsx (+prop)}`, `components/RifasApp.tsx` (view state + integración)
+  - **Tests**: `tests/combos.test.mjs` (nuevo, 6 tests), `tests/combo-service.test.mjs` (nuevo, 4 tests)
+  - **Migration artifacts**: `drizzle/0000_marvelous_jubilee.sql` + `drizzle/meta/` (nuevos — pero migration aplicada vía MCP, archivo es snapshot solamente)
+  - **Config**: `tsconfig.json` (target es5 → es2020 para drizzle-kit), `scripts/deploy.sh` (CRON_SECRET preservado), `.claude/settings.local.json` (permisos read-only ampliados)
+  - **Specs/plans**: `docs/superpowers/specs/2026-05-05-combos-evento-design.md` (nuevo, 363 líneas), `docs/superpowers/plans/2026-05-05-combos-evento-fase-6.md` (nuevo, 2.524 líneas)
+- **Notas críticas**:
+  - **Producción tiene combos al 95%** pero sin compra real validada. T22 con tercero antes de anunciar.
+  - **Fase 7 invierte decisión Fase 6**: el split hero deployado pierde sentido si carrito es cross-product. La reconsideración va con brainstorm formal en próxima sesión.
+  - **Cualquier cambio en Fase 7 que toque rifa flow** (multi-select, schema purchase, webhook) requiere `node run-concurrency-test.js` en VALIDATE — sin excepciones.
+  - **Schema combos en Turso vacío** (0 combo_purchases) — primera compra real será la prueba de fuego del flow completo + del comprobante MP con COM-code en description.
+- **Stats sesión**: ~6h efectivas, 22 commits combos + 1 fix deploy + 4 docs/state, 21/22 tasks completos (Fase 6 al 95%), 2 deploys exitosos, 0 cargo extra GCP, producción intacta + actualizada.
 
 ### 2026-05-05 — Save #5 (Fase 5.A completa en main + Fase 5.B completa en feature branch)
 - **Tareas completadas**: 5.A (9 commits) + 5.B (13 commits)

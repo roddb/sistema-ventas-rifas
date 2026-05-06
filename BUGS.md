@@ -2,13 +2,13 @@
 
 ## Proyecto: Sistema de Ventas de Rifas Escolares
 ## Iniciado: 2025-09-11
-## Última actualización: 2026-05-05
+## Última actualización: 2026-05-06
 
 ---
 
 ## Resumen
-- **Total bugs registrados**: 10
-- **Resueltos**: 10
+- **Total bugs registrados**: 11
+- **Resueltos**: 11
 - **Pendientes**: 0
 
 > Histórico migrado desde `old_docs/Historial.md` (sesión inaugural 2025-09-11). A partir de la reactivación 2026-05-01, los nuevos bugs se numeran BUG-006+.
@@ -16,6 +16,20 @@
 ---
 
 ## Registro Detallado
+
+### BUG-011 | RESUELTO
+- **Fecha detectado**: 2026-05-05 (durante deploy de Fase 5.D paso (d))
+- **Fecha resuelto**: 2026-05-05
+- **Descripción**: `scripts/deploy.sh` no preservaba `CRON_SECRET` en el `--set-secrets` del comando `gcloud run deploy`. Como `--set-secrets` reemplaza la lista completa (no merge incremental), cualquier deploy posterior a la configuración inicial de Cloud Scheduler perdía el `CRON_SECRET` env var. El handler `/api/cron/cleanup` tiene la lógica `if (cronSecret && req.headers.authorization === ...)` — sin la env var, la validación se saltea y el endpoint queda **fail-open** a internet.
+- **Contexto**: Cloud Scheduler `rifa-cleanup` se configuró el 2026-05-04 (gate pre-Fase 4) agregando `CRON_SECRET` al servicio Cloud Run vía `gcloud run services update --update-secrets`. Eso resultó en revision `00009-mvp` con CRON_SECRET correctamente seteado. **Pero los deploys siguientes** (revisions `00010-jlz`, `00011-jdr`, `00012-xrl`) usaron `./scripts/deploy.sh` que tenía `--set-secrets` sin CRON_SECRET → la env var se perdió en cada uno → desde el 2026-05-04 al 2026-05-05, el endpoint cron estuvo abierto a internet sin auth.
+- **Error/Síntoma**: `gcloud run services describe sistema-ventas-rifas --format='value(spec.template.spec.containers[0].env[].name)'` no listaba `CRON_SECRET` en revisions 00010/00011/00012. Endpoint `POST /api/cron/cleanup` sin Authorization header devolvía 200 (procesaba el cleanup) en vez de 401.
+- **Causa raíz**: El comando `gcloud run deploy --set-secrets=...` reemplaza la lista completa de secrets (no merge). Cualquier secret no listado se borra del servicio. El setup original de Cloud Scheduler usó `--update-secrets` (que sí mergea), generando una asimetría entre setup inicial y deploys posteriores.
+- **Impacto real**: bajo (Cloud Scheduler seguía mandando el bearer correctamente, así que el cron job en sí funcionaba; pero alguien externo podía haber spammeado el endpoint para liberar reservas — reservas no había, así que no pasó nada). **Riesgo de seguridad**: alto si alguien había escaneado el endpoint.
+- **Solución aplicada**: Editar `scripts/deploy.sh` agregando `CRON_SECRET=cron-secret:latest` al `--set-secrets` (commit `b50abc0`). Verificación post-deploy revision `00013-529`: env var listada en `gcloud run services describe`, endpoint sin auth devuelve 401 correctamente. Validado nuevamente en revision `00014-9wz`.
+- **Archivos afectados**: `scripts/deploy.sh` (líneas comentario + `--set-secrets`)
+- **Aprendizaje**: comandos `gcloud run` con flags como `--set-secrets`, `--set-env-vars` reemplazan listas; `--update-*` mergean. Si un proyecto mezcla los dos en distintos momentos del ciclo, queda una bomba latente. **Regla operativa**: cualquier secret/env crítico que esté en el servicio Cloud Run debe estar TAMBIÉN en `scripts/deploy.sh` para que no se pierda en deploys.
+
+---
 
 ### BUG-H001 | RESUELTO
 - **Fecha detectado**: 2025-09-11
