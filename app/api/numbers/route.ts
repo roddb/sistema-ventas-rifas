@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { RaffleService } from '@/lib/services/raffleService';
+import { OrderService } from '@/lib/services/orderService';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -7,9 +8,9 @@ export const revalidate = 0;
 export async function GET() {
   try {
     // Limpiar reservas expiradas antes de devolver números
-    const cleanupResult = await RaffleService.releaseExpiredReservations();
-    if (cleanupResult.cancelledPurchases > 0) {
-      console.log(`Cleaned up ${cleanupResult.cancelledPurchases} expired reservations`);
+    const cleanupResult = await OrderService.releaseExpiredOrders();
+    if (cleanupResult.cancelled > 0) {
+      console.log(`Cleaned up ${cleanupResult.cancelled} expired reservations`);
     }
     
     // Obtener rifa activa
