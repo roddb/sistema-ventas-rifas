@@ -175,52 +175,85 @@ export class OrderService {
     });
   }
 
+  // C1 + I3: private helper that executes cancel logic inside an existing tx (no nested transaction).
+  // Called by both cancelOrder (public, opens its own tx) and removeNumberFromOrder (already in tx).
+  private static async _cancelOrderInTx(tx: any, orderId: string): Promise<void> {
+    const orderUpdate = await tx.update(orders)
+      .set({ paymentStatus: 'cancelled', updatedAt: new Date() })
+      .where(and(eq(orders.id, orderId), eq(orders.paymentStatus, 'pending')))
+      .returning({ id: orders.id });
+
+    if (orderUpdate.length === 0) {
+      await tx.insert(eventLogs).values({
+        eventType: 'ORDER_CANCEL_RACE',
+        orderId,
+        data: JSON.stringify({ reason: 'order_not_pending' }),
+      });
+      return;
+    }
+
+    // C1: cancel raffle children — use .returning() to detect race conditions
+    const raffleChildren = await tx.select({ id: purchases.id })
+      .from(purchases).where(eq(purchases.orderId, orderId));
+    for (const child of raffleChildren) {
+      const purchaseUpd = await tx.update(purchases)
+        .set({ paymentStatus: 'cancelled', updatedAt: new Date() })
+        .where(and(eq(purchases.id, child.id), eq(purchases.paymentStatus, 'pending')))
+        .returning({ id: purchases.id });
+      if (purchaseUpd.length === 0) {
+        await tx.insert(eventLogs).values({
+          eventType: 'ORDER_CANCEL_CHILD_RACE',
+          orderId,
+          purchaseId: child.id,
+          data: JSON.stringify({ reason: 'raffle_child_not_pending' }),
+        });
+      }
+
+      const numbersUpd = await tx.update(raffleNumbers)
+        .set({ status: 'available', reservedAt: null, purchaseId: null, soldAt: null, updatedAt: new Date() })
+        .where(and(eq(raffleNumbers.purchaseId, child.id), eq(raffleNumbers.status, 'reserved')))
+        .returning({ id: raffleNumbers.id });
+      if (numbersUpd.length === 0) {
+        await tx.insert(eventLogs).values({
+          eventType: 'ORDER_CANCEL_CHILD_RACE',
+          orderId,
+          purchaseId: child.id,
+          data: JSON.stringify({ reason: 'raffle_numbers_not_reserved' }),
+        });
+      }
+    }
+
+    // C1: cancel combo children — use .returning() to detect race conditions
+    const comboChildren = await tx.select({ id: comboPurchases.id })
+      .from(comboPurchases).where(eq(comboPurchases.orderId, orderId));
+    for (const child of comboChildren) {
+      const comboUpd = await tx.update(comboPurchases)
+        .set({ paymentStatus: 'cancelled', updatedAt: new Date() })
+        .where(and(eq(comboPurchases.id, child.id), eq(comboPurchases.paymentStatus, 'pending')))
+        .returning({ id: comboPurchases.id });
+      if (comboUpd.length === 0) {
+        await tx.insert(eventLogs).values({
+          eventType: 'ORDER_CANCEL_CHILD_RACE',
+          orderId,
+          purchaseId: child.id,
+          data: JSON.stringify({ reason: 'combo_child_not_pending' }),
+        });
+      }
+    }
+
+    await tx.insert(eventLogs).values({
+      eventType: 'ORDER_CANCELLED',
+      orderId,
+      data: JSON.stringify({
+        raffleChildren: raffleChildren.map((c: any) => c.id),
+        comboChildren: comboChildren.map((c: any) => c.id),
+      }),
+    });
+  }
+
   static async cancelOrder(orderId: string): Promise<void> {
     if (!this.isDbAvailable()) return;
-
-    await db.transaction(async (tx: any) => {
-      const orderUpdate = await tx.update(orders)
-        .set({ paymentStatus: 'cancelled', updatedAt: new Date() })
-        .where(and(eq(orders.id, orderId), eq(orders.paymentStatus, 'pending')))
-        .returning({ id: orders.id });
-
-      if (orderUpdate.length === 0) {
-        await tx.insert(eventLogs).values({
-          eventType: 'ORDER_CANCEL_RACE',
-          orderId,
-          data: JSON.stringify({ reason: 'order_not_pending' }),
-        });
-        return;
-      }
-
-      const raffleChildren = await tx.select({ id: purchases.id })
-        .from(purchases).where(eq(purchases.orderId, orderId));
-      for (const child of raffleChildren) {
-        await tx.update(purchases)
-          .set({ paymentStatus: 'cancelled', updatedAt: new Date() })
-          .where(and(eq(purchases.id, child.id), eq(purchases.paymentStatus, 'pending')));
-        await tx.update(raffleNumbers)
-          .set({ status: 'available', reservedAt: null, purchaseId: null, soldAt: null, updatedAt: new Date() })
-          .where(and(eq(raffleNumbers.purchaseId, child.id), eq(raffleNumbers.status, 'reserved')));
-      }
-
-      const comboChildren = await tx.select({ id: comboPurchases.id })
-        .from(comboPurchases).where(eq(comboPurchases.orderId, orderId));
-      for (const child of comboChildren) {
-        await tx.update(comboPurchases)
-          .set({ paymentStatus: 'cancelled', updatedAt: new Date() })
-          .where(and(eq(comboPurchases.id, child.id), eq(comboPurchases.paymentStatus, 'pending')));
-      }
-
-      await tx.insert(eventLogs).values({
-        eventType: 'ORDER_CANCELLED',
-        orderId,
-        data: JSON.stringify({
-          raffleChildren: raffleChildren.map((c: any) => c.id),
-          comboChildren: comboChildren.map((c: any) => c.id),
-        }),
-      });
-    });
+    await db.transaction(async (tx: any) => this._cancelOrderInTx(tx, orderId));
   }
 
   static async confirmOrderPayment(
@@ -239,6 +272,18 @@ export class OrderService {
 
         if (!existing) throw new Error(`Order ${orderId} not found`);
         if (existing.paymentStatus === 'approved') return { confirmed: false, reason: 'already_approved' };
+        // I1+I2: handle terminal states gracefully instead of throwing → avoids MP webhook retry loop
+        if (existing.paymentStatus === 'cancelled') {
+          await tx.insert(eventLogs).values({
+            eventType: 'ORDER_PAYMENT_AFTER_CANCEL',
+            orderId,
+            data: JSON.stringify({ paymentData, severity: 'high', requiresRefund: true }),
+          });
+          return { confirmed: false, reason: 'order_already_cancelled' };
+        }
+        if (existing.paymentStatus === 'rejected') {
+          return { confirmed: false, reason: 'order_already_rejected' };
+        }
 
         const orderUpdate = await tx.update(orders)
           .set({
@@ -348,9 +393,19 @@ export class OrderService {
         )).limit(1);
       if (!num) return { removed: false, reason: 'number_not_in_order' };
 
-      await tx.update(raffleNumbers)
+      // C2: include purchaseId in WHERE to prevent liberating a number that concurrently
+      // moved to a different purchase between the SELECT above and this UPDATE.
+      const updResult = await tx.update(raffleNumbers)
         .set({ status: 'available', reservedAt: null, purchaseId: null, updatedAt: new Date() })
-        .where(and(eq(raffleNumbers.id, num.id), eq(raffleNumbers.status, 'reserved')));
+        .where(and(
+          eq(raffleNumbers.id, num.id),
+          eq(raffleNumbers.status, 'reserved'),
+          eq(raffleNumbers.purchaseId, rafflePurchaseId),
+        ))
+        .returning({ id: raffleNumbers.id });
+      if (updResult.length === 0) {
+        return { removed: false, reason: 'race_lost_to_other_purchase' };
+      }
 
       await tx.delete(purchaseNumbers).where(and(
         eq(purchaseNumbers.purchaseId, rafflePurchaseId),
@@ -380,9 +435,11 @@ export class OrderService {
           .where(eq(orders.id, orderId));
 
         if (totalAfterRaffleRemoved === 0) {
-          await tx.update(orders)
-            .set({ paymentStatus: 'cancelled', updatedAt: new Date() })
-            .where(and(eq(orders.id, orderId), eq(orders.paymentStatus, 'pending')));
+          // I3: order is now empty → cancel entire order (incl. any remaining combo children)
+          // via _cancelOrderInTx to reuse the full cancel logic (with C1 race guards).
+          // The raffle purchase was already cancelled above; _cancelOrderInTx's WHERE pending
+          // guard makes the repeated cancel of that child idempotent.
+          await this._cancelOrderInTx(tx, orderId);
         }
       } else {
         await tx.update(purchases)
@@ -411,11 +468,13 @@ export class OrderService {
     let cancelled = 0;
     let releasedNumbers = 0;
 
+    // C3: removed eq(orders.hasRaffle, true) — combo-only orders also accumulate as
+    // pending-forever when the user abandons MP. cancelOrder is safe for combo-only
+    // orders (it releases 0 raffleNumbers), so we cancel ALL expired pending orders.
     const expired = await db.select({ id: orders.id })
       .from(orders)
       .where(and(
         eq(orders.paymentStatus, 'pending'),
-        eq(orders.hasRaffle, true),
         lte(orders.createdAt, fifteenMinutesAgo),
       ));
 
