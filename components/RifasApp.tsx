@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import PageContainer from './layout/PageContainer';
-import HeroLanding from './hero/HeroLanding';
+import AppHeader from './layout/AppHeader';
+import ProductSplitHero from './hero/ProductSplitHero';
 import NumberGrid from './grid/NumberGrid';
 import BuyerForm from './form/BuyerForm';
 import PurchaseReview from './review/PurchaseReview';
@@ -48,12 +49,26 @@ const EMPTY_FORM: FormData = {
 
 const POLLING_INTERVAL_MS = 30000;
 
+// === ComboFlow placeholder — replaced in Task 18 ===
+
+function ComboFlowStub({ onExit }: { onExit: () => void }) {
+  return (
+    <PageContainer>
+      <AppHeader variant="wizard" onBack={onExit} />
+      <main className="px-5 pt-6 pb-10 text-ink-muted text-sm">
+        ComboFlow placeholder · se implementa en Task 18
+      </main>
+    </PageContainer>
+  );
+}
+
 export default function RifasApp() {
   // === State ===
+  const [view, setView] = useState<'home' | 'rifa' | 'combo'>('home');
   const [raffleConfig, setRaffleConfig] = useState<RaffleConfig | null>(null);
   const [numbers, setNumbers] = useState<RaffleNumber[]>([]);
   const [selectedNumber, setSelectedNumber] = useState<number | null>(null);
-  const [currentStep, setCurrentStep] = useState<Step>('hero');
+  const [currentStep, setCurrentStep] = useState<Step>('grid');
   const [formData, setFormData] = useState<FormData>(EMPTY_FORM);
   const [purchaseId, setPurchaseId] = useState<string | null>(null);
   const [paymentId, setPaymentId] = useState<string | null>(null);
@@ -203,8 +218,10 @@ export default function RifasApp() {
 
   const goBack = useCallback(() => {
     setError(null);
-    if (currentStep === 'grid') setCurrentStep('hero');
-    else if (currentStep === 'form') setCurrentStep('grid');
+    if (currentStep === 'grid') {
+      setView('home');
+      setCurrentStep('grid'); // reset so re-entering rifa always starts at grid
+    } else if (currentStep === 'form') setCurrentStep('grid');
     else if (currentStep === 'review') setCurrentStep('form');
   }, [currentStep]);
 
@@ -214,7 +231,8 @@ export default function RifasApp() {
     setPurchaseId(null);
     setPaymentId(null);
     setError(null);
-    setCurrentStep('hero');
+    setCurrentStep('grid');
+    setView('home');
     if (typeof window !== 'undefined') {
       window.history.replaceState({}, '', '/');
     }
@@ -229,6 +247,24 @@ export default function RifasApp() {
 
   // === Render ===
 
+  // === View branching ===
+
+  if (view === 'home') {
+    const totalAvailable = numbers.filter((n) => n.status === 'available').length;
+    return (
+      <ProductSplitHero
+        raffleAvailable={raffleConfig ? totalAvailable : null}
+        rafflePrice={raffleConfig?.pricePerNumber ?? null}
+        onSelect={(product) => setView(product)}
+      />
+    );
+  }
+
+  if (view === 'combo') {
+    return <ComboFlowStub onExit={() => setView('home')} />;
+  }
+
+  // view === 'rifa' — fall through to wizard JSX
   if (!raffleConfig) {
     return (
       <PageContainer>
@@ -241,15 +277,6 @@ export default function RifasApp() {
 
   return (
     <PageContainer>
-      {currentStep === 'hero' && (
-        <HeroLanding
-          raffleTitle={raffleConfig.title}
-          pricePerNumber={raffleConfig.pricePerNumber}
-          totalNumbers={raffleConfig.totalNumbers}
-          availableCount={numbers.filter((n) => n.status === 'available').length}
-          onStart={goToGrid}
-        />
-      )}
       {currentStep === 'grid' && (
         <NumberGrid
           numbers={numbers}
