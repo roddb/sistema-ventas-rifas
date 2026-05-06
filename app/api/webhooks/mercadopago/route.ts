@@ -173,8 +173,8 @@ async function handlePaymentNotification(
     console.warn(`[Webhook] Legacy COM- received post-Fase 7: ${ref}`);
     await db.insert(schema.eventLogs).values({
       eventType: 'LEGACY_COM_WEBHOOK_IGNORED',
-      purchaseId: ref,
-      data: JSON.stringify({ paymentInfo }),
+      purchaseId: null,
+      data: JSON.stringify({ comboPurchaseRef: ref, paymentInfo }),
     });
     return NextResponse.json({ received: true, ignored: 'legacy_COM' }, { status: 200 });
   }

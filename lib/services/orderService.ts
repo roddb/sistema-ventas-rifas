@@ -158,9 +158,9 @@ export class OrderService {
         }
         await tx.insert(eventLogs).values({
           eventType: 'COMBO_PURCHASE_CREATED',
-          purchaseId: comboChildId,
+          purchaseId: null,
           orderId,
-          data: JSON.stringify({ orderId, items: validComboItems, totalAmount: comboTotal }),
+          data: JSON.stringify({ orderId, comboChildId, items: validComboItems, totalAmount: comboTotal }),
         });
       }
 
@@ -235,8 +235,8 @@ export class OrderService {
         await tx.insert(eventLogs).values({
           eventType: 'ORDER_CANCEL_CHILD_RACE',
           orderId,
-          purchaseId: child.id,
-          data: JSON.stringify({ reason: 'combo_child_not_pending' }),
+          purchaseId: null,
+          data: JSON.stringify({ reason: 'combo_child_not_pending', comboChildId: child.id }),
         });
       }
     }
