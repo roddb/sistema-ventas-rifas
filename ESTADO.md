@@ -77,11 +77,11 @@
 - [x] ~~6.C Sandbox MP smoke E2E~~ **SKIPPED 2026-05-06** por decisión del usuario — precedente Fase 5.D (BUG-010 fue detectado por compra real, sandbox no lo había detectado). Validación se mueve a 6.D compra real.
 - [~] 6.D Deploy ✅ cerrado (revision `sistema-ventas-rifas-00014-9wz`, smoke prod verde con split hero render OK + 4 routes /api/combo/* + CRON_SECRET preservado). **Pendiente compra real $15.000 con tercero (T22)** — no Rodrigo por seller=buyer (lección 2026-05-04). Coordinar con Romi - TEST
 
-### Fase 7: Carrito unificado rifa + combos (2026-05-06 — pendiente brainstorm)
+### Fase 7: Carrito unificado rifa + combos (2026-05-06 — en progreso)
 > Pedido del usuario al cierre de Fase 6: que un mismo comprador pueda agregar N números de rifa + N combos en un mismo carrito y pagar todo en una sola transacción MP. Esto invierte la decisión "compra cross-product = NO" de Fase 6 sección 2 y reactiva multi-selección de números (la rifa 2025 lo soportaba, Fase 5.B lo restringió a 1 por compra).
 
-- [ ] 7.0 Brainstorming + spec (próxima sesión) — temas a cerrar: schema (relación rifa_numbers + combo_items en una "compra padre"), concurrencia (timeout reserva rifa 15min vs combos sin timeout — qué pasa si user tarda y se vence), webhook dispatch atómico (ambos sub-flows o uno solo), UI (split hero pierde sentido), MP preference items mezclados, naming (`PUR-` / `COM-` / nuevo `ORD-`), cleanup soft - DEV
-- [ ] 7.A Schema + service unificado - DEV
+- [x] 7.0 Brainstorming + spec (próxima sesión) — temas a cerrar: schema (relación rifa_numbers + combo_items en una "compra padre"), concurrencia (timeout reserva rifa 15min vs combos sin timeout — qué pasa si user tarda y se vence), webhook dispatch atómico (ambos sub-flows o uno solo), UI (split hero pierde sentido), MP preference items mezclados, naming (`PUR-` / `COM-` / nuevo `ORD-`), cleanup soft - DEV
+- [~] 7.A Schema + service unificado - DEV
 - [ ] 7.B UI carrito cross-product - DEV
 - [ ] 7.C Tests concurrencia (CRÍTICO — patrón rifa intacto) - TEST
 - [ ] 7.D Deploy + compra real - TEST
@@ -89,6 +89,16 @@
 ---
 
 ## Bitácora
+
+### 2026-05-06 — Task 7.A.1: Worktree setup completado
+- **Tareas completadas**: 7.A T1 (setup worktree + eslint root)
+- **Acciones**:
+  - Creado worktree `.worktrees/fase-7` con rama `feature/carrito-unificado` desde main
+  - Agregado `.eslintrc.json` con `"root": true` para evitar conflicto de plugins eslint (lección Fase 5.B)
+  - Verificado `npm run lint` ✓ (sin warnings), `npm run build` ✓ (route bundle OK)
+  - Commiteado en feature branch: `590abd7` "chore(fase-7): worktree setup + eslint root"
+- **Próxima tarea**: 7.A T2 (schema additions Drizzle)
+- **Archivos nuevos**: `.worktrees/fase-7/.eslintrc.json`
 
 ### 2026-05-06 — Save #6 (Fase 5.D cerrada parcial + Fase 6 al 95% en producción)
 - **Tareas completadas**: 5.D paso (a) merge feature branch + (d) deploy revision `00013-529` · cleanup BD (Romi test purchase borrada, precio rifa $2000→$1000) · Fase 6 brainstorm + spec + plan · 6.A 100% (server-side completo, 12 commits) · 6.B 100% (UI completa, 6 commits) · 6.D parte deploy (revision `00014-9wz` con combos en producción)
