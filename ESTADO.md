@@ -68,6 +68,15 @@
 - [ ] 5.D Validación: smoke iPhone Safari + Android Chrome + desktop Chrome + concurrency test + merge feature branch + deploy + compra real - TEST
 - [ ] 5.E Logo STA y hex institucionales reales aplicados (cuando los pase el usuario) - DEV
 
+### Fase 6: Combos del evento (venta online MP)
+> Spec aprobado: `docs/superpowers/specs/2026-05-05-combos-evento-design.md`. Sumar venta online de 3 combos de comida ($15.000 c/u, sandwich chorizo / sandwich carne / 3 empanadas) integrada al sitio actual con UI split entry. Pickup presencial el día del evento contra nombre + COM-code.
+
+- [x] 6.0 Spec aprobado (2026-05-05) - DEV
+- [x] 6.A Server-side: schema + service + APIs + webhook dispatch - DEV
+- [x] 6.B UI: ProductSplitHero + ComboFlow + 5 componentes nuevos - DEV
+- [ ] 6.C Sandbox MP smoke E2E - TEST
+- [ ] 6.D Deploy + compra real $15.000 - TEST
+
 ---
 
 ## Bitácora

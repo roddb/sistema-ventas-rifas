@@ -3,9 +3,13 @@ import AppHeader from '../layout/AppHeader';
 
 interface PendingScreenProps {
   onRestart: () => void;
+  /** Contexto del producto para ajustar el copy. Default 'rifa' (sin breaking change). */
+  productType?: 'rifa' | 'combo';
 }
 
-export default function PendingScreen({ onRestart }: PendingScreenProps) {
+export default function PendingScreen({ onRestart, productType = 'rifa' }: PendingScreenProps) {
+  const isCombo = productType === 'combo';
+
   return (
     <>
       <AppHeader variant="hero" meta="2026" />
@@ -19,7 +23,7 @@ export default function PendingScreen({ onRestart }: PendingScreenProps) {
         </div>
 
         <h1 className="text-2xl font-extrabold text-ink tracking-tight-2 leading-tight">
-          Tu pago está en proceso
+          {isCombo ? 'Tu pedido está en proceso' : 'Tu pago está en proceso'}
         </h1>
         <p className="text-sm text-ink-soft">
           MercadoPago aún está confirmando tu pago. En cuanto se confirme te llega el comprobante por email. Podés cerrar esta pantalla.

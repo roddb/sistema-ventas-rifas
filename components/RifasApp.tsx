@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import PageContainer from './layout/PageContainer';
-import HeroLanding from './hero/HeroLanding';
+import ProductSplitHero from './hero/ProductSplitHero';
 import NumberGrid from './grid/NumberGrid';
 import BuyerForm from './form/BuyerForm';
 import PurchaseReview from './review/PurchaseReview';
 import SuccessScreen from './status/SuccessScreen';
 import FailureScreen from './status/FailureScreen';
 import PendingScreen from './status/PendingScreen';
+import ComboFlow from './combos/ComboFlow';
 
 // === Types ===
 
@@ -48,17 +49,22 @@ const EMPTY_FORM: FormData = {
 
 const POLLING_INTERVAL_MS = 30000;
 
+
 export default function RifasApp() {
   // === State ===
+  const [view, setView] = useState<'home' | 'rifa' | 'combo'>('home');
   const [raffleConfig, setRaffleConfig] = useState<RaffleConfig | null>(null);
   const [numbers, setNumbers] = useState<RaffleNumber[]>([]);
   const [selectedNumber, setSelectedNumber] = useState<number | null>(null);
-  const [currentStep, setCurrentStep] = useState<Step>('hero');
+  const [currentStep, setCurrentStep] = useState<Step>('grid');
   const [formData, setFormData] = useState<FormData>(EMPTY_FORM);
   const [purchaseId, setPurchaseId] = useState<string | null>(null);
   const [paymentId, setPaymentId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Combo flow — initial step + order code set from MP redirect query params
+  const [comboInitialStep, setComboInitialStep] = useState<'catalog' | 'success' | 'failure' | 'pending' | null>(null);
+  const [comboInitialOrderCode, setComboInitialOrderCode] = useState<string | null>(null);
 
   // === API wrappers ===
   const loadConfig = useCallback(async () => {
@@ -159,10 +165,25 @@ export default function RifasApp() {
     return () => clearInterval(id);
   }, [loadConfig, loadNumbers]);
 
-  // Detect status redirect from MP callback (?payment=success|failure|pending)
+  // Detect status redirect from MP callback
+  // Combo params: ?combo=success|failure|pending&order=COM-xxx
+  // Rifa params:  ?payment=success|failure|pending&purchase=PUR-xxx
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
+
+    // --- Combo branch (check first) ---
+    const comboStatus = params.get('combo');
+    const order = params.get('order');
+    if (comboStatus && order) {
+      setView('combo');
+      setComboInitialStep(comboStatus as 'success' | 'failure' | 'pending');
+      setComboInitialOrderCode(order);
+      window.history.replaceState({}, '', '/');
+      return;
+    }
+
+    // --- Rifa branch ---
     const payment = params.get('payment');
     const purchase = params.get('purchase');
     const pid = params.get('payment_id');
@@ -203,8 +224,10 @@ export default function RifasApp() {
 
   const goBack = useCallback(() => {
     setError(null);
-    if (currentStep === 'grid') setCurrentStep('hero');
-    else if (currentStep === 'form') setCurrentStep('grid');
+    if (currentStep === 'grid') {
+      setView('home');
+      setCurrentStep('grid'); // reset so re-entering rifa always starts at grid
+    } else if (currentStep === 'form') setCurrentStep('grid');
     else if (currentStep === 'review') setCurrentStep('form');
   }, [currentStep]);
 
@@ -214,7 +237,8 @@ export default function RifasApp() {
     setPurchaseId(null);
     setPaymentId(null);
     setError(null);
-    setCurrentStep('hero');
+    setCurrentStep('grid');
+    setView('home');
     if (typeof window !== 'undefined') {
       window.history.replaceState({}, '', '/');
     }
@@ -229,6 +253,30 @@ export default function RifasApp() {
 
   // === Render ===
 
+  // === View branching ===
+
+  if (view === 'home') {
+    const totalAvailable = numbers.filter((n) => n.status === 'available').length;
+    return (
+      <ProductSplitHero
+        raffleAvailable={raffleConfig ? totalAvailable : null}
+        rafflePrice={raffleConfig?.pricePerNumber ?? null}
+        onSelect={(product) => setView(product)}
+      />
+    );
+  }
+
+  if (view === 'combo') {
+    return (
+      <ComboFlow
+        onExit={() => setView('home')}
+        initialStep={comboInitialStep ?? 'catalog'}
+        initialOrderCode={comboInitialOrderCode}
+      />
+    );
+  }
+
+  // view === 'rifa' — fall through to wizard JSX
   if (!raffleConfig) {
     return (
       <PageContainer>
@@ -241,15 +289,6 @@ export default function RifasApp() {
 
   return (
     <PageContainer>
-      {currentStep === 'hero' && (
-        <HeroLanding
-          raffleTitle={raffleConfig.title}
-          pricePerNumber={raffleConfig.pricePerNumber}
-          totalNumbers={raffleConfig.totalNumbers}
-          availableCount={numbers.filter((n) => n.status === 'available').length}
-          onStart={goToGrid}
-        />
-      )}
       {currentStep === 'grid' && (
         <NumberGrid
           numbers={numbers}

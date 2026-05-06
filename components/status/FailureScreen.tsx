@@ -4,9 +4,13 @@ import AppHeader from '../layout/AppHeader';
 interface FailureScreenProps {
   number: number | null;
   onRestart: () => void;
+  /** Contexto del producto para ajustar el copy. Default 'rifa' (sin breaking change). */
+  productType?: 'rifa' | 'combo';
 }
 
-export default function FailureScreen({ number, onRestart }: FailureScreenProps) {
+export default function FailureScreen({ number, onRestart, productType = 'rifa' }: FailureScreenProps) {
+  const isCombo = productType === 'combo';
+
   return (
     <>
       <AppHeader variant="hero" meta="2026" />
@@ -24,9 +28,14 @@ export default function FailureScreen({ number, onRestart }: FailureScreenProps)
         </h1>
         <p className="text-sm text-ink-soft">
           MercadoPago no pudo procesar tu pago.{' '}
-          {number !== null && (
+          {!isCombo && number !== null && (
             <>
               Tu número <strong>{number}</strong> sigue disponible si querés intentar de nuevo en los próximos 15 minutos.
+            </>
+          )}
+          {isCombo && (
+            <>
+              Tu pedido de combos sigue disponible si querés intentar de nuevo.
             </>
           )}
         </p>
