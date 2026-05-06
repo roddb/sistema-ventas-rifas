@@ -8,13 +8,14 @@ import RangeTabs from './RangeTabs';
 import type { RaffleNumber } from '../RifasApp';
 
 const RANGE_SIZE = 100;
+const MAX_SELECTION = 10;
 
 interface NumberGridProps {
   numbers: RaffleNumber[];
   totalNumbers: number;
-  selectedNumber: number | null;
+  selected: number[];
   pricePerNumber: number;
-  onSelect: (n: number | null) => void;
+  onSelectionChange: (numbers: number[]) => void;
   onContinue: () => void;
   onBack: () => void;
 }
@@ -22,9 +23,9 @@ interface NumberGridProps {
 export default function NumberGrid({
   numbers,
   totalNumbers,
-  selectedNumber,
+  selected,
   pricePerNumber,
-  onSelect,
+  onSelectionChange,
   onContinue,
   onBack,
 }: NumberGridProps) {
@@ -45,6 +46,8 @@ export default function NumberGrid({
     return arr;
   }, [rangeStart, rangeEnd]);
 
+  const selectedSet = useMemo(() => new Set(selected), [selected]);
+
   const formattedPrice = new Intl.NumberFormat('es-AR', {
     style: 'currency',
     currency: 'ARS',
@@ -55,25 +58,30 @@ export default function NumberGrid({
     const idx = Math.floor((n - 1) / RANGE_SIZE);
     setActiveRangeIndex(idx);
     const status = statusByNumber.get(n);
-    if (status === 'available') {
-      onSelect(n);
+    if (status === 'available' && !selectedSet.has(n) && selected.length < MAX_SELECTION) {
+      onSelectionChange([...selected, n]);
     }
   };
 
   const handleCellClick = (n: number) => {
-    if (selectedNumber === n) {
-      onSelect(null);
-    } else {
-      onSelect(n);
+    if (selectedSet.has(n)) {
+      // Deselect
+      onSelectionChange(selected.filter((x) => x !== n));
+    } else if (selected.length < MAX_SELECTION) {
+      // Add
+      onSelectionChange([...selected, n]);
     }
+    // else: cap reached, ignore
   };
+
+  const totalCost = selected.length * pricePerNumber;
 
   return (
     <>
       <AppHeader
         variant="wizard"
-        title="Elegí tu número"
-        meta={selectedNumber ? '1 sel.' : '0 sel.'}
+        title="Elegí tus números"
+        meta={`${selected.length}/${MAX_SELECTION} sel.`}
         onBack={onBack}
       />
 
@@ -90,12 +98,14 @@ export default function NumberGrid({
         <div className="grid grid-cols-8 sm:grid-cols-10 gap-1.5">
           {rangeNumbers.map((n) => {
             const baseStatus = statusByNumber.get(n) ?? 'available';
-            const status: NumberStatus = selectedNumber === n ? 'selected' : baseStatus;
+            const isSelected = selectedSet.has(n);
+            const status: NumberStatus = isSelected ? 'selected' : baseStatus;
             return (
               <NumberCell
                 key={n}
                 number={n}
                 status={status}
+                isSelected={isSelected}
                 onClick={handleCellClick}
               />
             );
@@ -106,17 +116,19 @@ export default function NumberGrid({
       <StickyBottomBar>
         <div className="flex items-center justify-between mb-2">
           <div className="text-xs text-ink-muted">
-            {selectedNumber ? `1 número · ${formattedPrice}` : 'Sin selección'}
+            {selected.length > 0
+              ? `${selected.length} ${selected.length === 1 ? 'número' : 'números'} · ${new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(totalCost)}`
+              : 'Sin selección'}
           </div>
-          {selectedNumber && (
+          {selected.length > 0 && (
             <span className="bg-brand-tint text-brand text-[11px] font-bold px-2 py-1 rounded-chip">
-              {selectedNumber}
+              {selected.length === 1 ? `#${selected[0]}` : `${selected.length} seleccionados`}
             </span>
           )}
         </div>
         <button
           type="button"
-          disabled={!selectedNumber}
+          disabled={selected.length === 0}
           onClick={onContinue}
           className="w-full bg-brand text-white text-sm font-semibold py-2.5 rounded-ctl hover:bg-brand/90 disabled:bg-ink-muted disabled:cursor-not-allowed transition-colors"
         >

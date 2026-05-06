@@ -1,10 +1,12 @@
 import { memo } from 'react';
+import { Check } from 'lucide-react';
 
 export type NumberStatus = 'available' | 'reserved' | 'sold' | 'selected';
 
 interface NumberCellProps {
   number: number;
   status: NumberStatus;
+  isSelected?: boolean;
   onClick: (n: number) => void;
 }
 
@@ -15,16 +17,19 @@ const STATUS_CLASSES: Record<NumberStatus, string> = {
   selected: 'bg-accent text-white font-bold ring-2 ring-accent-strong cursor-pointer',
 };
 
-function NumberCellInner({ number, status, onClick }: NumberCellProps) {
+function NumberCellInner({ number, status, isSelected = false, onClick }: NumberCellProps) {
   const isInteractive = status === 'available' || status === 'selected';
   return (
     <button
       type="button"
       disabled={!isInteractive}
       onClick={isInteractive ? () => onClick(number) : undefined}
-      className={`aspect-square rounded-chip flex items-center justify-center text-[11px] font-semibold transition-colors ${STATUS_CLASSES[status]}`}
+      className={`aspect-square rounded-chip flex flex-col items-center justify-center text-[11px] font-semibold transition-colors relative ${STATUS_CLASSES[status]}`}
       aria-label={`Número ${number}, ${status}`}
     >
+      {isSelected && (
+        <Check size={14} className="absolute top-0.5 right-0.5" aria-hidden="true" />
+      )}
       {number}
     </button>
   );
