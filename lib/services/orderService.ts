@@ -70,6 +70,10 @@ export class OrderService {
       const totalAmount = raffleTotal + comboTotal;
 
       // 1. INSERT order
+      // BUG-012: createdAt/updatedAt explícitos con new Date() — sin esto,
+      // Drizzle cae al default SQL `CURRENT_TIMESTAMP` que guarda string,
+      // y el cron filter `lte(orders.createdAt, fifteenMinutesAgo)` falla.
+      const now = new Date();
       await tx.insert(orders).values({
         id: orderId,
         buyerName: input.buyer.name,
@@ -82,6 +86,8 @@ export class OrderService {
         hasRaffle,
         hasCombos: validComboItems.length > 0,
         paymentStatus: 'pending',
+        createdAt: now,
+        updatedAt: now,
       });
 
       let raffleChildId: string | undefined;
@@ -103,6 +109,8 @@ export class OrderService {
           totalAmount: raffleTotal,
           numbersCount: input.raffle!.numberIds.length,
           paymentStatus: 'pending',
+          createdAt: now,
+          updatedAt: now,
         });
 
         const reservedAt = new Date();
@@ -121,6 +129,7 @@ export class OrderService {
           await tx.insert(purchaseNumbers).values({
             purchaseId: raffleChildId,
             raffleNumberId: result[0].id,
+            createdAt: now,
           });
         }
 
@@ -145,6 +154,8 @@ export class OrderService {
           totalAmount: comboTotal,
           itemsCount,
           paymentStatus: 'pending',
+          createdAt: now,
+          updatedAt: now,
         });
         for (const item of validComboItems) {
           const combo = getComboById(item.comboId)!;
@@ -154,6 +165,7 @@ export class OrderService {
             comboNameSnapshot: combo.name,
             unitPrice: combo.price,
             quantity: item.quantity,
+            createdAt: now,
           });
         }
         await tx.insert(eventLogs).values({
