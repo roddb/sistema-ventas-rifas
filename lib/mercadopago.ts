@@ -150,3 +150,73 @@ export async function getPurchaseIdFromPayment(paymentId: string): Promise<strin
     return null;
   }
 }
+
+interface CreateComboPreferenceData {
+  comboPurchaseId: string;
+  buyerName: string;
+  email: string;
+  items: { id: string; name: string; quantity: number; unitPrice: number }[];
+  totalAmount: number;
+}
+
+/**
+ * Crear preferencia MP para una compra de combos (multi-item).
+ * URLs derivan de NEXT_PUBLIC_BASE_URL runtime — fallback a dominio Cloud Run real
+ * (NUNCA localhost — leccion BUG-010).
+ */
+export async function createComboPreference(data: CreateComboPreferenceData) {
+  try {
+    console.log('Creating MP combo preference for:', data.comboPurchaseId);
+
+    const items: PreferenceItem[] = data.items.map((item) => ({
+      id: item.id,
+      title: `${item.name} (combo)`,
+      quantity: item.quantity,
+      unit_price: item.unitPrice,
+      currency_id: 'ARS'
+    }));
+
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://sistema-ventas-rifas-kc5dasqukq-ue.a.run.app';
+
+    const preferenceData = {
+      items,
+      payer: {
+        name: data.buyerName,
+        email: data.email
+      },
+      back_urls: {
+        success: `${baseUrl}/api/combo/payment/success`,
+        failure: `${baseUrl}/api/combo/payment/failure`,
+        pending: `${baseUrl}/api/combo/payment/pending`
+      },
+      external_reference: data.comboPurchaseId,
+      notification_url: `${baseUrl}/api/webhooks/mercadopago`,
+      description: `Pedido ${data.comboPurchaseId} · Rifa STA 2026`,
+      statement_descriptor: 'COMBO STA',
+      payment_methods: {
+        excluded_payment_types: [],
+        installments: 1,
+        default_installments: 1
+      },
+      expires: true,
+      expiration_date_from: new Date().toISOString(),
+      expiration_date_to: new Date(Date.now() + 15 * 60 * 1000).toISOString()
+    };
+
+    const response = await preference.create({ body: preferenceData });
+
+    console.log('MP combo preference created:', {
+      id: response.id,
+      init_point: response.init_point
+    });
+
+    return {
+      preferenceId: response.id!,
+      initPoint: response.init_point!,
+      sandboxInitPoint: response.sandbox_init_point!
+    };
+  } catch (error) {
+    console.error('Error creating MP combo preference:', error);
+    throw new Error('Failed to create combo payment preference');
+  }
+}
