@@ -5,11 +5,12 @@ interface FailureScreenProps {
   number: number | null;
   onRestart: () => void;
   /** Contexto del producto para ajustar el copy. Default 'rifa' (sin breaking change). */
-  productType?: 'rifa' | 'combo';
+  productType?: 'rifa' | 'combo' | 'order';
 }
 
 export default function FailureScreen({ number, onRestart, productType = 'rifa' }: FailureScreenProps) {
   const isCombo = productType === 'combo';
+  const isOrder = productType === 'order';
 
   return (
     <>
@@ -24,11 +25,11 @@ export default function FailureScreen({ number, onRestart, productType = 'rifa' 
         </div>
 
         <h1 className="text-2xl font-extrabold text-ink tracking-tight-2 leading-tight">
-          Hubo un problema con el pago
+          {isOrder ? 'Hubo un problema con tu compra' : 'Hubo un problema con el pago'}
         </h1>
         <p className="text-sm text-ink-soft">
           MercadoPago no pudo procesar tu pago.{' '}
-          {!isCombo && number !== null && (
+          {!isCombo && !isOrder && number !== null && (
             <>
               Tu número <strong>{number}</strong> sigue disponible si querés intentar de nuevo en los próximos 15 minutos.
             </>
@@ -36,6 +37,11 @@ export default function FailureScreen({ number, onRestart, productType = 'rifa' 
           {isCombo && (
             <>
               Tu pedido de combos sigue disponible si querés intentar de nuevo.
+            </>
+          )}
+          {isOrder && (
+            <>
+              Podés volver al inicio e intentar de nuevo.
             </>
           )}
         </p>

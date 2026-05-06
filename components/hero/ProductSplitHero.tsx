@@ -3,6 +3,7 @@
 import { Ticket, UtensilsCrossed } from 'lucide-react';
 import PageContainer from '../layout/PageContainer';
 import AppHeader from '../layout/AppHeader';
+import { COMBOS } from '../../lib/combos';
 
 interface ProductSplitHeroProps {
   raffleAvailable: number | null;
@@ -51,7 +52,7 @@ export default function ProductSplitHero({
             <UtensilsCrossed className="h-7 w-7 text-ink-soft" aria-hidden />
             <div className="text-sm font-bold text-ink">Combo evento</div>
             <div className="text-xs text-ink-muted">3 opciones</div>
-            <div className="text-lg font-black text-ink">$15.000</div>
+            <div className="text-lg font-black text-ink">${Math.min(...COMBOS.map((c) => c.price)).toLocaleString('es-AR')}</div>
           </button>
         </div>
       </main>

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { headers } from 'next/headers';
-import { RaffleService } from '@/lib/services/raffleService';
 import { verifyMercadoPagoWebhookSignature } from '@/lib/webhook-verification';
+import { OrderService } from '@/lib/services/orderService';
+import { db, schema } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -63,9 +64,11 @@ export async function POST(request: NextRequest) {
 
   try {
     switch (type) {
-      case 'payment':
-        await handlePaymentNotification(dataId, action);
+      case 'payment': {
+        const dispatchResponse = await handlePaymentNotification(dataId, action);
+        if (dispatchResponse) return dispatchResponse;
         break;
+      }
 
       case 'merchant_order':
         console.log('Merchant order notification received (not processed yet)');
@@ -111,13 +114,17 @@ interface PaymentInfo {
   statusDetail: string | undefined;
   externalReference: string | undefined | null;
   amount: number | undefined;
-  paymentMethod: { id?: string } | undefined | null;
+  paymentMethod: { id?: string; type?: string } | undefined | null;
   payerEmail: string | undefined;
 }
 
 // Dispatcher principal — obtiene detalles del pago y delega por prefijo del external_reference.
 // HMAC verification, idempotencia y manejo 5xx están ANTES de este punto (intactos).
-async function handlePaymentNotification(paymentId: string, action?: string) {
+// Returns a NextResponse for ORD-/PUR-/COM-/unknown refs, or undefined for no-op cases.
+async function handlePaymentNotification(
+  paymentId: string,
+  action?: string
+): Promise<NextResponse | undefined> {
   console.log(`Handling payment notification: ${paymentId}, action: ${action}`);
 
   const { getPaymentInfo } = await import('@/lib/mercadopago');
@@ -134,97 +141,51 @@ async function handlePaymentNotification(paymentId: string, action?: string) {
   }
 
   // 3. Dispatch por prefijo del external_reference
-  if (purchaseId.startsWith('PUR-')) {
-    await handleRifaPayment(purchaseId, paymentInfo, paymentId);
-  } else if (purchaseId.startsWith('COM-')) {
-    await handleComboPayment(purchaseId, paymentInfo, paymentId);
-  } else {
-    console.log(`Unknown external_reference prefix: ${purchaseId}`);
-    const { db, schema } = await import('@/lib/db');
+  const ref = purchaseId;
+
+  if (ref.startsWith('ORD-')) {
+    if (paymentInfo.status === 'approved') {
+      const result = await OrderService.confirmOrderPayment(ref, {
+        mercadoPagoPaymentId: String(paymentInfo.id),
+        paymentMethod: paymentInfo.paymentMethod?.type,
+      });
+      console.log(`[Webhook ORD-] confirmOrderPayment ${ref}:`, result);
+    } else if (paymentInfo.status === 'rejected' || paymentInfo.status === 'cancelled') {
+      await OrderService.cancelOrder(ref);
+      console.log(`[Webhook ORD-] cancelOrder ${ref}`);
+    } else {
+      console.log(`[Webhook ORD-] status ${paymentInfo.status} for ${ref}, no-op`);
+    }
+    return NextResponse.json({ received: true }, { status: 200 });
+  }
+
+  if (ref.startsWith('PUR-')) {
+    console.warn(`[Webhook] Legacy PUR- received post-Fase 7: ${ref}`);
     await db.insert(schema.eventLogs).values({
-      eventType: 'UNKNOWN_REFERENCE',
+      eventType: 'LEGACY_PUR_WEBHOOK_IGNORED',
+      purchaseId: ref,
+      data: JSON.stringify({ paymentInfo }),
+    });
+    return NextResponse.json({ received: true, ignored: 'legacy_PUR' }, { status: 200 });
+  }
+
+  if (ref.startsWith('COM-')) {
+    console.warn(`[Webhook] Legacy COM- received post-Fase 7: ${ref}`);
+    await db.insert(schema.eventLogs).values({
+      eventType: 'LEGACY_COM_WEBHOOK_IGNORED',
       purchaseId: null,
-      data: JSON.stringify({ paymentId, externalReference: purchaseId }),
+      data: JSON.stringify({ comboPurchaseRef: ref, paymentInfo }),
     });
+    return NextResponse.json({ received: true, ignored: 'legacy_COM' }, { status: 200 });
   }
-}
 
-// Rifa flow — lógica extraída de handlePaymentNotification original, comportamiento IDÉNTICO.
-// Verifica números reservados antes de confirmar; cancela en rejected/cancelled.
-async function handleRifaPayment(
-  purchaseId: string,
-  paymentInfo: PaymentInfo,
-  paymentId: string
-): Promise<void> {
-  if (paymentInfo.status === 'approved') {
-    console.log(`Payment approved! Verifying purchase ${purchaseId} before confirming...`);
-
-    const { db, schema } = await import('@/lib/db');
-    const { eq } = await import('drizzle-orm');
-
-    const [purchase] = await db
-      .select()
-      .from(schema.purchases)
-      .where(eq(schema.purchases.id, purchaseId))
-      .limit(1);
-
-    if (!purchase) {
-      console.error(`Purchase ${purchaseId} not found!`);
-      return;
-    }
-
-    const reservedNumbers = await db
-      .select()
-      .from(schema.raffleNumbers)
-      .where(eq(schema.raffleNumbers.purchaseId, purchaseId));
-
-    if (reservedNumbers.length !== purchase.numbersCount) {
-      console.error(
-        `Mismatch in reserved numbers! Expected ${purchase.numbersCount}, found ${reservedNumbers.length}`
-      );
-      console.log('Numbers may have been released due to timeout. Manual intervention required.');
-      return;
-    }
-
-    await RaffleService.confirmPayment(purchaseId, {
-      paymentMethod: paymentInfo.paymentMethod?.id || 'mercadopago',
-      mercadoPagoPaymentId: paymentId,
-    });
-
-    console.log(`Purchase ${purchaseId} confirmed successfully`);
-  } else if (paymentInfo.status === 'rejected' || paymentInfo.status === 'cancelled') {
-    console.log(`Payment ${paymentInfo.status}. Cancelling purchase ${purchaseId}`);
-    await RaffleService.cancelPayment(purchaseId);
-  } else {
-    console.log(`Payment status: ${paymentInfo.status} - No action taken`);
-  }
-}
-
-// Combo flow — sin stock limitado ni reservas; delega directamente a ComboService.
-async function handleComboPayment(
-  comboPurchaseId: string,
-  paymentInfo: PaymentInfo,
-  paymentId: string
-): Promise<void> {
-  const { ComboService } = await import('@/lib/services/comboService');
-
-  if (paymentInfo.status === 'approved') {
-    console.log(`Combo payment approved for ${comboPurchaseId}`);
-    await ComboService.confirmComboPayment({
-      comboPurchaseId,
-      paymentId,
-      paymentMethod: paymentInfo.paymentMethod?.id ?? 'mercadopago',
-    });
-    console.log(`Combo purchase ${comboPurchaseId} confirmed`);
-  } else if (paymentInfo.status === 'rejected' || paymentInfo.status === 'cancelled') {
-    console.log(`Combo payment ${paymentInfo.status} for ${comboPurchaseId}`);
-    await ComboService.cancelComboPayment({
-      comboPurchaseId,
-      reason: `payment ${paymentInfo.status}`,
-    });
-  } else {
-    console.log(`Combo payment status: ${paymentInfo.status} - No action`);
-  }
+  console.error(`[Webhook] UNKNOWN_REFERENCE: ${ref}`);
+  await db.insert(schema.eventLogs).values({
+    eventType: 'UNKNOWN_REFERENCE',
+    purchaseId: null,
+    data: JSON.stringify({ paymentId, externalReference: ref }),
+  });
+  return NextResponse.json({ received: true, ignored: 'unknown_ref' }, { status: 200 });
 }
 
 // Endpoint GET para verificación de MercadoPago
