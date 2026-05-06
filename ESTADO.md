@@ -73,7 +73,7 @@
 
 - [x] 6.0 Spec aprobado (2026-05-05) - DEV
 - [x] 6.A Server-side: schema + service + APIs + webhook dispatch - DEV
-- [ ] 6.B UI: ProductSplitHero + ComboFlow + 5 componentes nuevos - DEV
+- [x] 6.B UI: ProductSplitHero + ComboFlow + 5 componentes nuevos - DEV
 - [ ] 6.C Sandbox MP smoke E2E - TEST
 - [ ] 6.D Deploy + compra real $15.000 - TEST
 
