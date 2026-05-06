@@ -102,14 +102,28 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Handler para notificaciones de pago
+// Mirrors the return type of getPaymentInfo() in lib/mercadopago.ts.
+// Defined as a local interface to avoid dynamic-import-in-type-position limitations.
+// Note: `id` is number (MP payment IDs are integers); `paymentMethod` is the SDK PaymentMethod object.
+interface PaymentInfo {
+  id: number | undefined;
+  status: string | undefined;
+  statusDetail: string | undefined;
+  externalReference: string | undefined | null;
+  amount: number | undefined;
+  paymentMethod: { id?: string } | undefined | null;
+  payerEmail: string | undefined;
+}
+
+// Dispatcher principal — obtiene detalles del pago y delega por prefijo del external_reference.
+// HMAC verification, idempotencia y manejo 5xx están ANTES de este punto (intactos).
 async function handlePaymentNotification(paymentId: string, action?: string) {
   console.log(`Handling payment notification: ${paymentId}, action: ${action}`);
 
   const { getPaymentInfo } = await import('@/lib/mercadopago');
 
   // 1. Obtener detalles del pago desde la API de MercadoPago
-  const paymentInfo = await getPaymentInfo(paymentId);
+  const paymentInfo: PaymentInfo = await getPaymentInfo(paymentId);
   console.log('Payment details:', paymentInfo);
 
   // 2. Verificar el estado del pago
@@ -119,7 +133,29 @@ async function handlePaymentNotification(paymentId: string, action?: string) {
     return;
   }
 
-  // 3. Verificar que los números siguen reservados antes de confirmar
+  // 3. Dispatch por prefijo del external_reference
+  if (purchaseId.startsWith('PUR-')) {
+    await handleRifaPayment(purchaseId, paymentInfo, paymentId);
+  } else if (purchaseId.startsWith('COM-')) {
+    await handleComboPayment(purchaseId, paymentInfo, paymentId);
+  } else {
+    console.log(`Unknown external_reference prefix: ${purchaseId}`);
+    const { db, schema } = await import('@/lib/db');
+    await db.insert(schema.eventLogs).values({
+      eventType: 'UNKNOWN_REFERENCE',
+      purchaseId: null,
+      data: JSON.stringify({ paymentId, externalReference: purchaseId }),
+    });
+  }
+}
+
+// Rifa flow — lógica extraída de handlePaymentNotification original, comportamiento IDÉNTICO.
+// Verifica números reservados antes de confirmar; cancela en rejected/cancelled.
+async function handleRifaPayment(
+  purchaseId: string,
+  paymentInfo: PaymentInfo,
+  paymentId: string
+): Promise<void> {
   if (paymentInfo.status === 'approved') {
     console.log(`Payment approved! Verifying purchase ${purchaseId} before confirming...`);
 
@@ -161,6 +197,33 @@ async function handlePaymentNotification(paymentId: string, action?: string) {
     await RaffleService.cancelPayment(purchaseId);
   } else {
     console.log(`Payment status: ${paymentInfo.status} - No action taken`);
+  }
+}
+
+// Combo flow — sin stock limitado ni reservas; delega directamente a ComboService.
+async function handleComboPayment(
+  comboPurchaseId: string,
+  paymentInfo: PaymentInfo,
+  paymentId: string
+): Promise<void> {
+  const { ComboService } = await import('@/lib/services/comboService');
+
+  if (paymentInfo.status === 'approved') {
+    console.log(`Combo payment approved for ${comboPurchaseId}`);
+    await ComboService.confirmComboPayment({
+      comboPurchaseId,
+      paymentId,
+      paymentMethod: paymentInfo.paymentMethod?.id ?? 'mercadopago',
+    });
+    console.log(`Combo purchase ${comboPurchaseId} confirmed`);
+  } else if (paymentInfo.status === 'rejected' || paymentInfo.status === 'cancelled') {
+    console.log(`Combo payment ${paymentInfo.status} for ${comboPurchaseId}`);
+    await ComboService.cancelComboPayment({
+      comboPurchaseId,
+      reason: `payment ${paymentInfo.status}`,
+    });
+  } else {
+    console.log(`Combo payment status: ${paymentInfo.status} - No action`);
   }
 }
 
