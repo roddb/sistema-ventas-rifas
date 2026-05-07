@@ -7,8 +7,8 @@
 ---
 
 ## Resumen
-- **Total bugs registrados**: 11
-- **Resueltos**: 11
+- **Total bugs registrados**: 13
+- **Resueltos**: 13
 - **Pendientes**: 0
 
 > Histórico migrado desde `old_docs/Historial.md` (sesión inaugural 2025-09-11). A partir de la reactivación 2026-05-01, los nuevos bugs se numeran BUG-006+.
@@ -16,6 +16,35 @@
 ---
 
 ## Registro Detallado
+
+### BUG-013 | RESUELTO
+- **Fecha detectado**: 2026-05-06 (Fase 7.D pre-deploy, run 1/3 de concurrency tests)
+- **Fecha resuelto**: 2026-05-06
+- **Descripción**: 3 INSERTs a `event_logs` violaban FK `purchase_id REFERENCES purchases(id)` cuando el valor pasado era un `COM-xxx` (existe en `combo_purchases`, NO en `purchases`). Como `PRAGMA foreign_keys=1` en Turso, todo INSERT con purchaseId combo fallaba con `SQLITE_CONSTRAINT: FOREIGN KEY constraint failed`. Cualquier compra cross-product (rifa + combos) devolvía 500 con rollback total — ni order ni purchase ni nada se creaba.
+- **Contexto**: descubierto en run 1/3 del gate concurrency tests pre-deploy 7.D. Scenarios 1 y 4 (que usan combos) fallaron con `status=500 error="Internal error"`. Scenarios solo-rifa (User C scenario 4 sin combos) pasaron. El concurrency-validator había advertido "review estático insuficiente per CLAUDE.md, gate de 7.D = correr 3x runs" — y el primer run capturó el bug.
+- **Error/Síntoma**: dev server logs `[POST /api/order/purchase] LibsqlError: SQLITE_CONSTRAINT: SQLite error: FOREIGN KEY constraint failed at orderService.ts:132`.
+- **Causa raíz**: Schema declara `event_logs.purchase_id TEXT REFERENCES purchases(id)` solo (no a `combo_purchases`). Pero el código en 3 lugares insertaba un `COM-xxx` en ese campo: (1) `orderService.ts:159 COMBO_PURCHASE_CREATED`, (2) `orderService.ts:235 ORDER_CANCEL_CHILD_RACE` (rama combo), (3) `webhooks/mercadopago/route.ts:174 LEGACY_COM_WEBHOOK_IGNORED`. En Fase 6 funcionó porque la columna `event_logs.order_id` no existía aún y el FK enforcement era solo sobre purchases — pero al introducir `orders` en Fase 7 con FK enforcement activo, los inserts buggy quedaron expuestos.
+- **Solución aplicada**: pasar `purchaseId: null` y mover el `comboChildId` o `legacyRef` al campo `data` JSON del eventLog. Auditoría preservada via `order_id` (otra FK válida) o el contenido del data JSON. Ningún consumer filtra `event_logs` por `purchase_id` (verificado con grep), así que el cambio no rompe queries existentes. Fix aplicado en commit `d2033e4` (orderService.ts:161 + 238 + webhooks COM-) y completado en `8490eb9` para PUR- legacy (mismo patrón, prevención post-auditoría).
+- **Archivos afectados**: `lib/services/orderService.ts:161`, `lib/services/orderService.ts:238`, `app/api/webhooks/mercadopago/route.ts:166` y `:174`.
+- **Aprendizaje**: cuando una columna tiene FK a una tabla pero la realidad de negocio puede involucrar IDs de OTRA tabla con prefijo distinto (`PUR-` vs `COM-`), el patrón seguro es `null` + ID semántico en el `data` JSON. Alternativamente agregar columna paralela con FK a la otra tabla, pero eso requiere migration. **Regla operativa**: si vas a insertar un valor en una columna FK, verificá que ese valor existe en la tabla referenciada O pasá `null`.
+
+---
+
+### BUG-012 | RESUELTO
+- **Fecha detectado**: 2026-05-06 (post-deploy Fase 7.D, durante inspección de un order pendiente real esperando 15min de cron timeout)
+- **Fecha resuelto**: 2026-05-06 (mismo día, fix propagado en 2 commits)
+- **Descripción**: La columna `created_at` (declarada en schema como `integer('created_at', { mode: 'timestamp' }).default(sql\`CURRENT_TIMESTAMP\`)`) se guardaba como **TEXT** ISO format `"2026-05-06 21:56:58"` en vez de **integer unix epoch** porque `CURRENT_TIMESTAMP` en SQLite devuelve string. Drizzle solo convierte `Date → integer` cuando recibe explícitamente un `new Date()` en el INSERT — los defaults SQL pasan de largo. Resultado: el cron `releaseExpiredOrders` filtra con `lte(orders.createdAt, fifteenMinutesAgo)` (donde `fifteenMinutesAgo` es un integer unix epoch), comparando string vs integer → **nunca matchea**. Ningún order pending se libera por timeout. Los números quedan reservados eternamente.
+- **Contexto**: post-deploy 7.D (revision 00015-bzb). Una compra de prueba real (Rodrigo intentando con su propia cuenta, bloqueado por seller=buyer) creó un order pending con 3 nums reservados a las 21:56. A las 22:35 (39 min después, cron corrió 5+ veces cada 5min), el order seguía pending y los nums seguían reserved. El usuario sospechó "ya pasaron 10 min, debería haberse limpiado". Inspección de logs reveló cron con `cancelled: 0` cada vez. Inspección de la BD mostró `typeof(created_at) = text` y `(strftime('%s','now') - created_at)/60 = 29635084` (valor absurdo, confirmó string-vs-integer mismatch).
+- **Error/Síntoma**: queries `SELECT typeof(created_at) FROM orders WHERE id='ORD-...'` devolvían `'text'`. `gcloud run services logs` mostraba `Cleanup completed: { cancelled: 0, releasedNumbers: 0 }` cada 5min indefinidamente para orders que claramente tenían >15min.
+- **Causa raíz**: `sql\`CURRENT_TIMESTAMP\`` en SQLite/libsql devuelve string ISO `"YYYY-MM-DD HH:MM:SS"`. El modo `{ mode: 'timestamp' }` de Drizzle solo aplica al lado JS (auto-convierte Date ↔ integer) cuando vos pasás un valor desde tu código. NO afecta lo que hace el motor SQL al evaluar el DEFAULT. Por eso INSERTs sin `createdAt` explícito caen al default SQL string. **Por qué no se detectó pre-deploy**: los concurrency tests usan `/api/order/cancel` explícito (no esperan timeout). El Scenario 2 manual del gate funcionó porque `UPDATE orders SET created_at = strftime('%s','now') - 1000` escribe un INTEGER explícito — exactamente la diferencia que oculta el bug. Solo se descubre con un order pending real esperando que el cron lo limpie.
+- **Impacto real**: catastrófico para producción. Un comprador que abandona el carrito tras crear un order pero antes de pagar → sus números se quedan reservados forever, sin posibilidad de que otro user los compre. La rifa eventualmente se llenaría de zombies y los números quedarían bloqueados. Inaceptable para venta real.
+- **Solución aplicada**: pasar `createdAt: new Date(), updatedAt: new Date()` explícito en TODOS los INSERTs persistentes. Drizzle convierte Date → integer unix epoch automáticamente. Sin esto, el default SQL gana y guarda string.
+  - **Commit `34d111c`** (fix mínimo crítico): 5 INSERTs en `orderService.createOrder` (orders, purchases, purchase_numbers, combo_purchases, combo_purchase_items). Validado E2E: order creado tras fix → `typeof(created_at)='integer'` → backdate via UPDATE → cron cleanup `{ cancelled: 1, releasedNumbers: 2 }`.
+  - **Commit `8490eb9`** (fix completo I-3 post-auditoría): los 12 INSERTs restantes a `event_logs` en `orderService.ts` + 3 en `webhooks/mercadopago/route.ts`. Aunque event_logs no se filtra por edad hoy, dashboards/reportes temporales futuros romperían si quedaban como TEXT. 172 rows pre-fix con typeof=text quedaron como deuda histórica (no bloquea operación nueva).
+- **Archivos afectados**: `lib/services/orderService.ts` (17 INSERTs en total fixeados), `app/api/webhooks/mercadopago/route.ts` (3 INSERTs).
+- **Aprendizaje**: en Drizzle ORM con SQLite/Turso, NUNCA confiar en `default(sql\`CURRENT_TIMESTAMP\`)` para columnas declaradas como `integer({ mode: 'timestamp' })`. Pasar `createdAt: new Date()` explícito en cada INSERT. Alternativa más robusta: cambiar el default a `default(sql\`(unixepoch())\`)` que devuelve integer (SQLite ≥3.38, Turso lo soporta) — pero requiere migration de schema. **Regla promovible a CLAUDE.md**: "todo `db.insert` o `tx.insert` a una tabla con `mode:'timestamp'` DEBE pasar `createdAt: new Date()` explícito; el default SQL guarda TEXT y rompe queries de filtro temporal".
+
+---
 
 ### BUG-011 | RESUELTO
 - **Fecha detectado**: 2026-05-05 (durante deploy de Fase 5.D paso (d))

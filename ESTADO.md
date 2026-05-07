@@ -5,8 +5,8 @@
 - **Repositorio**: https://github.com/roddb/sistema-ventas-rifas
 - **Producción**: https://sistema-ventas-rifas-kc5dasqukq-ue.a.run.app (Cloud Run, us-east1)
 - **Última edición productiva**: Septiembre–Octubre 2025 (rifa escolar 2025)
-- **Estado actual**: Reactivación 2026 — proyecto dado de baja al cerrar la rifa anterior, vuelve a levantarse para nueva edición
-- **Última sesión**: 2026-05-06 — Save #7 — Fase 7 al 75% en branch `feature/carrito-unificado` (21 commits). 7.A server-side + 7.B UI + 7.C concurrency tests cerradas con subagent-driven-development (~30 implementers + 4 reviewers, ~5h efectivas). Migration aplicada a Turso productiva (8 tablas). 7.D deploy + smoke real $18.000 con tercero pendiente para próxima sesión. Producción intacta en revision `00014-9wz`.
+- **Estado actual**: Reactivación 2026 — Fase 7 (carrito unificado) deployada a producción 2026-05-06, esperando smoke real con tercero (T43). Producción en revision `sistema-ventas-rifas-00018-62z`.
+- **Última sesión**: 2026-05-06 — Save #8 — Fase 7.D al 86% (6 de 7 tasks). Merge feature → main, deploy 4 revisiones (00015-bzb → 00018-62z), 4 hot-fixes críticos durante el deploy day (BUG FK COM-xxx, cap=10 removed + truncate title MP, BUG-012 created_at integer, fixes I-1 + I-3 post-auditoría con 4 agents). Producción operativa, anti-sobreventa verificada (0 active duplicates). Solo falta T43 compra real con Romi.
 - **Versiones previas de la documentación**: `old_docs/` (CLAUDE.md viejo, README, Historial, INTEGRACION_MERCADOPAGO, TUTORIAL_MERCADOPAGO, TEST_CONCURRENCIA)
 
 ---
@@ -82,13 +82,67 @@
 
 - [x] 7.0 Brainstorming + spec aprobado (2026-05-06) — `docs/superpowers/specs/2026-05-06-carrito-unificado-design.md` (556 líneas, 13 decisiones cerradas) - DEV
 - [x] 7.A Server-side completo: schema orders padre + 3 ALTER TABLE migration aplicada a Turso prod + OrderService (createOrder/cancelOrder/confirmOrderPayment/removeNumberFromOrder/releaseExpiredOrders) con locks optimistas + 7 routes nuevas /api/order/* + webhook dispatch ORD-/PUR-legacy/COM-legacy + cron refactor + 12 routes viejas borradas + cleanup raffleService/comboService. 13 commits en feature branch `feature/carrito-unificado`. Final review por payment-flow-debugger ✅. Plan: `docs/superpowers/plans/2026-05-06-carrito-unificado-fase-7.md` - DEV
-- [x] 7.B UI carrito cross-product completa: OrderFlow orchestrator + StickyCartBar + CartDrawer + CrossSellSheet + UnifiedBuyerForm + UnifiedReview + OrderSuccessScreen + NumberGrid multi-select cap 10 + RifasApp shell refactor + 7 componentes viejos borrados. 5 commits en feature branch. Lint+build verde. Final code reviewer: 1 critical (double PageContainer ComboCatalog) + 3 important (precio hardcodeado hero, buttons sin type, error banner Tailwind defaults) detectados → fixeados pre-cierre - DEV
-- [x] 7.C Tests concurrencia cross-product completos: test-concurrency.js reescrito apuntando a /api/order/* con scenarios 1+4 automatizados (real assertion de duplicados post-fix false-green), scenarios 2+3 documentados como manual (clock mocking / HMAC simulation requeridos). simple-test.js + run-concurrency-test.js obsoletos borrados. test-concurrency.legacy.js archivado. concurrency-validator: ⚠️ Aprobado con observaciones — code review confirma anti-sobreventa preservada en los 5 métodos del orderService. **Condición para 7.D pre-deploy**: correr `node test-concurrency.js` 3x con dev server contra zona limpia 1990-2000, todas verdes; simular scenario 2 manual con Turso MCP - TEST
-- [ ] 7.D Deploy + smoke prod automatizado (URL inspection MP API lección BUG-010) + compra real cross-product $18.000 con tercero - TEST
+- [x] 7.B UI carrito cross-product completa: OrderFlow orchestrator + StickyCartBar + CartDrawer + CrossSellSheet + UnifiedBuyerForm + UnifiedReview + OrderSuccessScreen + NumberGrid multi-select + RifasApp shell refactor + 7 componentes viejos borrados. 5 commits en feature branch. Lint+build verde. Final code reviewer: 1 critical + 3 important detectados → fixeados pre-cierre. **Cap 10 removido en deploy day** por pedido del usuario (commit `6c3661f`) + truncate title MP a 200 chars - DEV
+- [x] 7.C Tests concurrencia cross-product completos: test-concurrency.js reescrito apuntando a /api/order/* con scenarios 1+4 automatizados (real assertion de duplicados post-fix false-green), scenarios 2+3 documentados como manual. concurrency-validator: ⚠️ Aprobado con observaciones — gate 7.D = correr 3x runs + scenario 2 manual. **Gate ejecutado: BUG FK COM-xxx detectado en run 1, fixeado, 4/4 runs post-fix verdes** (commit `d2033e4`) - TEST
+- [x] 7.D Deploy + smoke prod automatizado completados (revision `00018-62z`). Backup BD pre-deploy + merge feature → main + 4 revisiones deployadas (00015 fix FK COM-xxx, 00016 cap removed + truncate, 00017 BUG-012 fix, 00018 fixes I-1 + I-3 post-auditoría). Smoke prod E2E con URL inspection MP API verde (lección BUG-010 cumplida). **Auditoría completa con 4 agents paralelos** (payment-flow-debugger + concurrency-validator + code-reviewer + db-migration-reviewer) — 0 critical, 7 important detectados, 3 fixeados pre-cierre (I-1 PUR- legacy FK + I-3 BUG-012 completo en 15 inserts event_logs + I-4 doc actualizada). 4 fixeados quedan para post-launch (UI race polling, UNIQUE purchase_numbers, batch UPDATE para N>50, refactor `tx: any`) - DEV
+- [ ] 7.E Compra real cross-product $18.000 con tercero (Romi) — Rodrigo bloqueado por seller=buyer. Pendiente coordinación humana - TEST
 
 ---
 
 ## Bitácora
+
+### 2026-05-06 — Save #8 (Fase 7.D deployada + 4 hot-fixes + auditoría con 4 agents)
+- **Tareas completadas**: 7.D pre-deploy gates (3 runs concurrency + scenario 2 manual) · merge feature → main · deploy 4 revisiones (00015→00018) · smoke prod automatizado con URL inspection MP API · cap 10 removido + truncate title MP · BUG-012 created_at integer · auditoría completa con 4 agents · I-1 PUR- legacy FK · I-3 BUG-012 completo en event_logs (15 inserts adicionales)
+- **En progreso**: ninguna
+- **Próxima tarea**: **7.E compra real $18.000 con tercero (Romi)** — coordinación humana, NO Rodrigo (seller=buyer bloqueado por MP). Cuando ocurra: validar BD post-pago + cerrar Fase 7.
+- **Bugs nuevos**: BUG-012 (created_at TEXT vs integer rompía cron — descubierto en orden pendiente real), BUG-013 (FK violation event_logs.purchase_id con COM-xxx — capturado en gate concurrency tests pre-deploy). 1 issue I-1 pre-deploy (mismo bug COM- replicado en branch PUR- legacy del webhook) detectado por payment-flow-debugger en auditoría post-deploy y fixeado.
+- **Acciones principales — Pre-deploy 7.D gates**:
+  - Worktree `.worktrees/fase-7` con dev server local apuntando a Turso prod (override TURSO_DATABASE_URL del shell — lección 2026-05-04).
+  - Run 1/3 concurrency tests: **falló con SQLITE_CONSTRAINT FOREIGN KEY** en orderService.ts:132. Diagnóstico via payment-flow-debugger agent: 3 inserts a event_logs.purchase_id con COM-xxx violan FK a purchases(id). Fix `d2033e4`: purchaseId=null + comboChildId/legacyRef en data JSON. **Sin este gate, todas las compras cross-product habrían roto en producción**.
+  - Runs 1-3 post-fix: 4/4 verdes (Scenario 1 + 4 anti-sobreventa preservada).
+  - Scenario 2 manual via Turso MCP: order pending backdated 1000s + cron cleanup → cancelled, nums liberados; webhook tardío via tsx dynamic import → `confirmed: false reason: order_already_cancelled` con event ORDER_PAYMENT_AFTER_CANCEL severity high. Lock optimista verificado E2E.
+- **Acciones principales — Deploy + smoke**:
+  - Backup BD productiva pre-deploy a `backups/rifa-2026-pre-fase7-2026-05-06.json` (gitignored, snapshot de las 8 tablas).
+  - Merge `feature/carrito-unificado` → main (commit `91170ef`, 22 commits integrados). Cleanup worktree + branch local + remote.
+  - Deploy revision `sistema-ventas-rifas-00015-bzb` con carrito unificado.
+  - Smoke prod automatizado: home 200, POST /api/order/purchase cross-product → orderId, POST /api/order/preference → preferenceId. **URL inspection vía MP API** (lección BUG-010 cumplida): las 4 URLs internas del preference (back_urls.success/failure/pending + notification_url) apuntan al dominio Cloud Run real con https. Webhook 400 (sin body), cron 401 (CRON_SECRET preservado, BUG-011 fix verificado). Cleanup BD del smoke order FK-safe.
+- **Acciones principales — Hot-fix cap 10 + truncate title MP**:
+  - Pedido del usuario: cap=10 nums es limitante a $1.000/num. Cambio: removed MAX_SELECTION en NumberGrid.tsx, removed `> 10` guard en orderService.ts, removed `.max(10)` de Zod en route.ts, copy "X/10 sel." → "X sel.".
+  - **Riesgo MP detectado y manejado**: title del item MP `"Rifa Escolar 2026 - Números: 1, 2, ..."` puede exceder 256 chars con N>30 nums altos → MP rechazaría con CPT01-style. Fix preventivo: truncate a "Rifa Escolar 2026 - N números" si la lista completa > 200 chars (margen seguro). Validado E2E con order de 50 nums ($50.000) y 30 nums ($30.000) en producción.
+  - Commit `6c3661f`. Deploy revision `00016-hv5`.
+- **Acciones principales — BUG-012 created_at integer**:
+  - Descubierto al inspeccionar order pending real (Rodrigo) que llevaba >40min y el cron decía `cancelled: 0` cada 5min. typeof(created_at)=text confirmó string-vs-integer mismatch.
+  - Fix `34d111c`: `createdAt: new Date(), updatedAt: new Date()` explícito en 5 INSERTs persistentes (orders, purchases, purchase_numbers, combo_purchases, combo_purchase_items).
+  - Validación E2E en prod: order creado tras fix → typeof=integer → backdate via Turso MCP → cron cleanup `{ cancelled: 1, releasedNumbers: 2 }`. Order pending → cancelled, nums liberados.
+  - Deploy revision `00017-k78`.
+- **Acciones principales — Auditoría completa con 4 agents paralelos**:
+  - Lanzados en paralelo: `payment-flow-debugger` + `concurrency-validator` + `general-purpose code reviewer` + `db-migration-reviewer`. Total ~25 min wall-clock.
+  - **0 Critical issues** detectados por ningún agent. Anti-sobreventa preservada (verificación viva via Turso MCP: 0 active duplicates en purchase_numbers, 0 orphans en 6 FK soft-checks, 0 orders pending viejos sin limpiar post-BUG-012).
+  - **9 Important issues** detectados (3 fixeados ahora, 4 quedan para post-launch, 2 absorbidos en doc):
+    - I-1 (payment): branch PUR- legacy webhook tenía mismo bug FK que COM- ya fixeado. **Fixeado** en commit `8490eb9` (purchaseId=null + legacyRef en data).
+    - I-3 (db-reviewer): BUG-012 fix incompleto — 15 inserts a event_logs seguían escribiendo created_at TEXT. **Fixeado** en commit `8490eb9` (createdAt: new Date() explícito en los 12 inserts orderService + 3 webhook).
+    - I-4 (code-reviewer): doc desactualizada (ESTADO/MEMORIA/BUGS). **Fixeada** en este Save #8.
+    - I-2 (db-reviewer): no hay UNIQUE en purchase_numbers.raffleNumberId — CLAUDE.md afirma falsamente que existe. **Pospuesta** (requiere migration).
+    - I-5 (code-reviewer): UI race polling 30s no actualiza nums seleccionados que pasaron a sold. **Pospuesta** (UX, no bloquea).
+    - I-6 (payment): re-entradas con mercadoPagoPaymentId distinto. **Pospuesta** (caso edge).
+    - I-7 (concurrency): createOrder con N>50 nums es secuencial → riesgo timeout 60s Cloud Run. **Pospuesta** — recomendación batch UPDATE inArray para Fase 8.
+  - Deploy revision `00018-62z` con I-1 + I-3 fixeados. Verificación E2E: order de prueba post-deploy → `event_logs.created_at` con typeof=integer.
+- **Decisiones de diseño tomadas**:
+  - **Cap rifa = sin techo** (cambio del cap=10 original). El backend escala con UPDATEs secuenciales hasta N grande pero hay riesgo de timeout en N>>100 — doc en MEMORIA.md como deuda técnica.
+  - **Title MP truncate a 200 chars** con fallback "N números". Comprador con orders chicos (≤30 nums) ve la lista completa en el comprobante MP; orders grandes ven el resumen. Detalle siempre disponible en BD via purchase_numbers.
+  - **createdAt explícito en TODOS los INSERTs**: regla operativa para escapar la trampa del default SQL CURRENT_TIMESTAMP. Promovida a CLAUDE.md.
+  - **Auditoría con 4 agents paralelos como patrón**: lanzar especialistas distintos (pago, concurrency, code, schema) en paralelo cubre más superficie que un único reviewer general.
+- **Archivos modificados / creados**:
+  - **Server-side**: `lib/services/orderService.ts` (FK fix + 12 inserts createdAt + cap removed), `lib/mercadopago.ts` (truncate title + cap), `app/api/webhooks/mercadopago/route.ts` (FK fixes COM- y PUR- + 3 inserts createdAt), `app/api/order/purchase/route.ts` (Zod sin max), `app/api/cron/cleanup/route.ts` (sin cambios — el bug estaba en orderService).
+  - **UI**: `components/grid/NumberGrid.tsx` (MAX_SELECTION removed + copy).
+  - **Backups**: `backups/rifa-2026-pre-fase7-2026-05-06.json` (gitignored).
+  - **Meta**: ESTADO.md, MEMORIA.md, BUGS.md (este save).
+- **Notas críticas**:
+  - **Producción operativa post-Fase 7**: revision 00018-62z con carrito unificado cross-product, cap removido, cron cleanup funcional, fixes anti-FK aplicados. Smoke E2E verde.
+  - **Anti-sobreventa garantizada**: verificación viva via Turso MCP confirmó 0 active duplicates. El patrón UPDATE WHERE status='available' .returning() length===0 funciona correctamente en los 5 sitios que tocan raffle_numbers.
+  - **Compra real con tercero todavía pendiente** (T43 = 7.E ahora) — Rodrigo bloqueado por seller=buyer. Coordinación con Romi.
+  - **Si T43 falla**: rollback target = revision `00014-9wz` (pre-Fase 7). BD productiva tiene tablas additive — rollback de código + redeploy a target sin migration reverse necesaria.
+- **Stats sesión**: ~6h efectivas (incluyendo 1h de auditoría con 4 agents en paralelo), 26 commits totales (22 de Fase 7 + 4 hot-fixes), 4 deploys productivos (00015→00018), 4 bugs/issues capturados pre-launch, 0 cargo extra GCP.
 
 ### 2026-05-06 — Save #7 (Fase 7 al 75%: 7.A+7.B+7.C completas, 7.D pendiente)
 - **Tareas completadas en sesión**: 7.0 (brainstorm + spec + plan, 13 decisiones) · 7.A (22 tasks server-side, 13 commits) · 7.B (11 tasks UI, 6 commits) · 7.C (5 tasks concurrency tests, 2 commits)
