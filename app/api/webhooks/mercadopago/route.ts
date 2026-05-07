@@ -161,10 +161,13 @@ async function handlePaymentNotification(
 
   if (ref.startsWith('PUR-')) {
     console.warn(`[Webhook] Legacy PUR- received post-Fase 7: ${ref}`);
+    // I-1: purchaseId=null para evitar FK violation si el ref no existe en purchases.
+    // Mismo patrón que LEGACY_COM_WEBHOOK_IGNORED. ref preservado en data JSON.
     await db.insert(schema.eventLogs).values({
       eventType: 'LEGACY_PUR_WEBHOOK_IGNORED',
-      purchaseId: ref,
-      data: JSON.stringify({ paymentInfo }),
+      purchaseId: null,
+      data: JSON.stringify({ legacyRef: ref, paymentInfo }),
+      createdAt: new Date(),
     });
     return NextResponse.json({ received: true, ignored: 'legacy_PUR' }, { status: 200 });
   }
@@ -175,6 +178,7 @@ async function handlePaymentNotification(
       eventType: 'LEGACY_COM_WEBHOOK_IGNORED',
       purchaseId: null,
       data: JSON.stringify({ comboPurchaseRef: ref, paymentInfo }),
+      createdAt: new Date(),
     });
     return NextResponse.json({ received: true, ignored: 'legacy_COM' }, { status: 200 });
   }
@@ -184,6 +188,7 @@ async function handlePaymentNotification(
     eventType: 'UNKNOWN_REFERENCE',
     purchaseId: null,
     data: JSON.stringify({ paymentId, externalReference: ref }),
+    createdAt: new Date(),
   });
   return NextResponse.json({ received: true, ignored: 'unknown_ref' }, { status: 200 });
 }

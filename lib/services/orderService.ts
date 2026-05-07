@@ -138,6 +138,7 @@ export class OrderService {
           purchaseId: raffleChildId,
           orderId,
           data: JSON.stringify({ orderId, numberIds: input.raffle!.numberIds, totalAmount: raffleTotal }),
+          createdAt: now,
         });
       }
 
@@ -173,6 +174,7 @@ export class OrderService {
           purchaseId: null,
           orderId,
           data: JSON.stringify({ orderId, comboChildId, items: validComboItems, totalAmount: comboTotal }),
+          createdAt: now,
         });
       }
 
@@ -181,6 +183,7 @@ export class OrderService {
         eventType: 'ORDER_CREATED',
         orderId,
         data: JSON.stringify({ hasRaffle, hasCombos: validComboItems.length > 0, totalAmount, raffleChildId, comboChildId }),
+        createdAt: now,
       });
 
       return { orderId, raffleChildId, comboChildId, totalAmount };
@@ -200,6 +203,7 @@ export class OrderService {
         eventType: 'ORDER_CANCEL_RACE',
         orderId,
         data: JSON.stringify({ reason: 'order_not_pending' }),
+        createdAt: new Date(),
       });
       return;
     }
@@ -218,6 +222,7 @@ export class OrderService {
           orderId,
           purchaseId: child.id,
           data: JSON.stringify({ reason: 'raffle_child_not_pending' }),
+          createdAt: new Date(),
         });
       }
 
@@ -231,6 +236,7 @@ export class OrderService {
           orderId,
           purchaseId: child.id,
           data: JSON.stringify({ reason: 'raffle_numbers_not_reserved' }),
+          createdAt: new Date(),
         });
       }
     }
@@ -249,6 +255,7 @@ export class OrderService {
           orderId,
           purchaseId: null,
           data: JSON.stringify({ reason: 'combo_child_not_pending', comboChildId: child.id }),
+          createdAt: new Date(),
         });
       }
     }
@@ -260,6 +267,7 @@ export class OrderService {
         raffleChildren: raffleChildren.map((c: any) => c.id),
         comboChildren: comboChildren.map((c: any) => c.id),
       }),
+      createdAt: new Date(),
     });
   }
 
@@ -290,6 +298,7 @@ export class OrderService {
             eventType: 'ORDER_PAYMENT_AFTER_CANCEL',
             orderId,
             data: JSON.stringify({ paymentData, severity: 'high', requiresRefund: true }),
+            createdAt: new Date(),
           });
           return { confirmed: false, reason: 'order_already_cancelled' };
         }
@@ -360,6 +369,7 @@ export class OrderService {
           eventType: 'ORDER_PAYMENT_CONFIRMED',
           orderId,
           data: JSON.stringify({ ...paymentData, raffleChildren: raffleChildren.length, comboChildren: comboChildren.length }),
+          createdAt: new Date(),
         });
 
         return { confirmed: true };
@@ -372,6 +382,7 @@ export class OrderService {
             eventType: 'ORDER_PAYMENT_CONFLICT',
             orderId,
             data: JSON.stringify({ reason: c.reason, details: c.details, paymentData }),
+            createdAt: new Date(),
           });
         } catch {
           // swallow log error to surface original
@@ -467,6 +478,7 @@ export class OrderService {
         orderId,
         purchaseId: rafflePurchaseId,
         data: JSON.stringify({ numberRemoved: numberToRemove, newCount }),
+        createdAt: new Date(),
       });
 
       return { removed: true };
