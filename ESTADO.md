@@ -5,8 +5,8 @@
 - **Repositorio**: https://github.com/roddb/sistema-ventas-rifas
 - **Producción**: https://sistema-ventas-rifas-kc5dasqukq-ue.a.run.app (Cloud Run, us-east1)
 - **Última edición productiva**: Septiembre–Octubre 2025 (rifa escolar 2025)
-- **Estado actual**: Reactivación 2026 — Fase 7 (carrito unificado) deployada a producción 2026-05-06, esperando smoke real con tercero (T43). Producción en revision `sistema-ventas-rifas-00018-62z`.
-- **Última sesión**: 2026-05-06 — Save #8 — Fase 7.D al 86% (6 de 7 tasks). Merge feature → main, deploy 4 revisiones (00015-bzb → 00018-62z), 4 hot-fixes críticos durante el deploy day (BUG FK COM-xxx, cap=10 removed + truncate title MP, BUG-012 created_at integer, fixes I-1 + I-3 post-auditoría con 4 agents). Producción operativa, anti-sobreventa verificada (0 active duplicates). Solo falta T43 compra real con Romi.
+- **Estado actual**: Reactivación 2026 — **Fase 7 CERRADA al 100%**. Carrito unificado en producción (revision `00018-62z`) validado E2E con compra real cross-product de Rosario (esposa de Rodrigo): $16.000 = 1 número rifa (#4) + 1 combo carne. Webhook MP firmado confirmó el pago en 29s. Anti-sobreventa intacta.
+- **Última sesión**: 2026-05-07 — Save #9 — **T43/7.E completada**. Validación E2E cross-product en BD productiva: ORD-DMA9_vLzKW approved, PUR-KL_U8YK_YU approved, COM-WOjHqoGp approved, raffle_numbers #4 sold. 4 events en event_logs todos con `typeof(created_at)=integer` (BUG-012 sin regresión). Primera compra real cross-product exitosa post-Fase 7. Próximo foco abierto: 5.C admin / 5.E logo / issues post-launch I-2/I-5/I-7.
 - **Versiones previas de la documentación**: `old_docs/` (CLAUDE.md viejo, README, Historial, INTEGRACION_MERCADOPAGO, TUTORIAL_MERCADOPAGO, TEST_CONCURRENCIA)
 
 ---
@@ -85,11 +85,39 @@
 - [x] 7.B UI carrito cross-product completa: OrderFlow orchestrator + StickyCartBar + CartDrawer + CrossSellSheet + UnifiedBuyerForm + UnifiedReview + OrderSuccessScreen + NumberGrid multi-select + RifasApp shell refactor + 7 componentes viejos borrados. 5 commits en feature branch. Lint+build verde. Final code reviewer: 1 critical + 3 important detectados → fixeados pre-cierre. **Cap 10 removido en deploy day** por pedido del usuario (commit `6c3661f`) + truncate title MP a 200 chars - DEV
 - [x] 7.C Tests concurrencia cross-product completos: test-concurrency.js reescrito apuntando a /api/order/* con scenarios 1+4 automatizados (real assertion de duplicados post-fix false-green), scenarios 2+3 documentados como manual. concurrency-validator: ⚠️ Aprobado con observaciones — gate 7.D = correr 3x runs + scenario 2 manual. **Gate ejecutado: BUG FK COM-xxx detectado en run 1, fixeado, 4/4 runs post-fix verdes** (commit `d2033e4`) - TEST
 - [x] 7.D Deploy + smoke prod automatizado completados (revision `00018-62z`). Backup BD pre-deploy + merge feature → main + 4 revisiones deployadas (00015 fix FK COM-xxx, 00016 cap removed + truncate, 00017 BUG-012 fix, 00018 fixes I-1 + I-3 post-auditoría). Smoke prod E2E con URL inspection MP API verde (lección BUG-010 cumplida). **Auditoría completa con 4 agents paralelos** (payment-flow-debugger + concurrency-validator + code-reviewer + db-migration-reviewer) — 0 critical, 7 important detectados, 3 fixeados pre-cierre (I-1 PUR- legacy FK + I-3 BUG-012 completo en 15 inserts event_logs + I-4 doc actualizada). 4 fixeados quedan para post-launch (UI race polling, UNIQUE purchase_numbers, batch UPDATE para N>50, refactor `tx: any`) - DEV
-- [ ] 7.E Compra real cross-product $18.000 con tercero (Romi) — Rodrigo bloqueado por seller=buyer. Pendiente coordinación humana - TEST
+- [x] 7.E Compra real cross-product validada 2026-05-07 con Rosario (esposa, no Rodrigo por seller=buyer). $16.000 = 1 número rifa (#4) + 1 combo carne. ORD-DMA9_vLzKW · PUR-KL_U8YK_YU · COM-WOjHqoGp · MP payment 157362532623 (account_money). Webhook firmado confirmó en 29s (created 09:16:42 → confirmed 09:17:11). Validación BD via Turso MCP: order/purchase/combo_purchase todos `approved`, raffle_number #4 `sold`, 4 events en event_logs con `typeof(created_at)=integer`. **Fase 7 cerrada al 100%** - TEST
 
 ---
 
 ## Bitácora
+
+### 2026-05-07 — Save #9 (Fase 7.E cerrada — primera compra real cross-product E2E)
+- **Tareas completadas**: 7.E (T43) compra real cross-product validada en BD productiva con Rosario (esposa). Fase 7 cerrada al 100%.
+- **En progreso**: ninguna.
+- **Próxima tarea**: foco abierto, no hay item bloqueante. Candidatos:
+  - **5.C** Panel admin con basic auth + 3 tabs + export CSV (absorbe Fase 3.1 y parcialmente 3.3).
+  - **5.E** Logo STA + hex institucionales (cuando los pase el usuario).
+  - **Issues post-launch pospuestos**: I-2 (UNIQUE en `purchase_numbers.raffleNumberId` — requiere migration), I-5 (UI race polling 30s no actualiza nums seleccionados que pasaron a sold), I-6 (re-entradas con mercadoPagoPaymentId distinto), I-7 (createOrder N>50 secuencial → riesgo timeout 60s Cloud Run, recomendación batch UPDATE inArray).
+  - **Fase 4.3 / 4.4**: anuncio del lanzamiento al colegio + monitoreo activo primeras 24h.
+- **Bugs nuevos**: ninguno. La compra real validó BUG-012 sin regresión (4 event_logs con typeof=integer) y confirmó que el webhook MP firmado funciona idempotente E2E.
+- **Acciones principales — Validación E2E de la compra real**:
+  - Read-only queries Turso MCP a BD `sistema-de-riffas` para inspeccionar el estado post-compra de Rosario.
+  - **orders**: ORD-DMA9_vLzKW, payment_status=approved, total=$16.000, has_raffle=1, has_combos=1, mp_payment_id=157362532623, mp_preference_id=103052976-1a611099-de0d-4261-b0e9-81cf15badc3b. created 09:16:42 / updated 09:17:11 (delta 29s = tiempo entre createOrder y webhook firmado).
+  - **purchases**: PUR-KL_U8YK_YU approved $1.000, FK order_id=ORD-DMA9_vLzKW correcto.
+  - **purchase_numbers**: 1 fila vinculando PUR-KL_U8YK_YU al número 4.
+  - **raffle_numbers**: #4 status='sold', purchase_id=PUR-KL_U8YK_YU, sold_at=09:17:11.
+  - **combo_purchases**: COM-WOjHqoGp approved $15.000, FK order_id=ORD-DMA9_vLzKW correcto.
+  - **combo_purchase_items**: 1 fila combo_id='carne' (Sandwich de carne) snapshot $15.000 quantity=1.
+  - **event_logs**: 4 eventos en orden cronológico (PURCHASE_CREATED → COMBO_PURCHASE_CREATED → ORDER_CREATED → ORDER_PAYMENT_CONFIRMED), TODOS con `typeof(created_at)=integer` (validación crítica BUG-012). ORDER_PAYMENT_CONFIRMED contiene mp_payment_id, payment_method=account_money, raffleChildren=1, comboChildren=1.
+  - **Counts globales post-compra**: orders 1 approved + 46 cancelled, purchases 1 approved + 43 cancelled, combo_purchases 1 approved + 31 cancelled, raffle_numbers 1999 available + 1 sold (Rosario, #4). Anti-sobreventa: 0 duplicados activos.
+- **Decisiones de diseño tomadas**: ninguna nueva. La validación confirmó las decisiones de Fase 7 (orders padre + dispatch por prefijo `ORD-` + locks optimistas + createdAt explícito).
+- **Archivos modificados / creados**: solo meta — `ESTADO.md`, `MEMORIA.md` (este save). Sin cambios de código.
+- **Notas críticas**:
+  - **Cierre operativo Fase 7**: el sistema cross-product está validado en producción con dinero real. Webhook MP idempotente, anti-sobreventa preservada, schema integer timestamps confirmado en uso real.
+  - **Primer venta 2026 registrada**: Rosario es la primera compra real de la rifa 2026 (la previa a Fase 7 fue la suya $2.000 del 2026-05-04 que validó BUG-010, en una rifa que se reseteó después).
+  - **Pickup combo**: Rosario debe presentarse el día del evento con su nombre + ORD-DMA9_vLzKW para retirar el sandwich de carne.
+  - **No hay tareas urgentes ni bloqueantes**. La rifa puede comunicarse al colegio cuando el usuario decida (Fase 4.3).
+- **Stats sesión**: ~15 min wall-clock, 0 commits de código (solo doc), 0 deploys, 0 cargo extra GCP, 1 venta real validada E2E.
 
 ### 2026-05-06 — Save #8 (Fase 7.D deployada + 4 hot-fixes + auditoría con 4 agents)
 - **Tareas completadas**: 7.D pre-deploy gates (3 runs concurrency + scenario 2 manual) · merge feature → main · deploy 4 revisiones (00015→00018) · smoke prod automatizado con URL inspection MP API · cap 10 removido + truncate title MP · BUG-012 created_at integer · auditoría completa con 4 agents · I-1 PUR- legacy FK · I-3 BUG-012 completo en event_logs (15 inserts adicionales)
