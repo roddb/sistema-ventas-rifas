@@ -5,8 +5,8 @@
 - **Repositorio**: https://github.com/roddb/sistema-ventas-rifas
 - **Producción**: https://sistema-ventas-rifas-kc5dasqukq-ue.a.run.app (Cloud Run, us-east1)
 - **Última edición productiva**: Septiembre–Octubre 2025 (rifa escolar 2025)
-- **Estado actual**: Reactivación 2026 — **Fase 7 cerrada + Fase 9 (tickets) cerrada**. Producción cross-product operativa (revision `00018-62z`). Venta real explotó entre Save #9 y Save #10: de 1 a 80 orders approved, **$2.814.000 recaudados** (414 números rifa + 160 combos). Anti-sobreventa intacta (0 duplicados activos). **Módulo de impresión de tickets implementado** (local-only, `/admin/tickets`) y **CSV para el supermercado generado** (80 familias + totales) para compras del evento del 29/05.
-- **Última sesión**: 2026-05-25 — Save #10 — **Fase 9 (módulo tickets local) completa + CSV supermercado + atención de consulta operativa de Romi**. 5 archivos nuevos bajo `lib/tickets/` + `app/admin/tickets/` + `app/api/admin/tickets/`. Validado E2E con 3 casos representativos (Rosario rifa+combo, Fernando combo-only, Alejandra Daglio cross-product) + tabla admin de 80 familias. CSV `rifa-supermercado-2026-05-25.csv` generado via `scripts/generar-supermercado-csv.mjs`. Consultas BD para 2 familias (Cyderboim, Masseroni) confirmadas como approved.
+- **Estado actual**: Reactivación 2026 — **Fase 7 cerrada + Fase 9 (tickets) rediseñada con v4**. Producción cross-product operativa (revision `00018-62z`). 80 orders approved, $2.814.000 recaudados. Anti-sobreventa intacta. **Módulo de impresión de tickets reescrito al formato "1 papel compacto por familia"** tras 4 iteraciones de mockup con el usuario: cada familia recibe un papel ~20mm de alto con apellido + alumno/curso + checkboxes por cada número rifa y unidad combo + escudo STA + línea de firma. ~7-8 hojas A4 para imprimir las 80 familias (vs 122 del formato original = 93% menos).
+- **Última sesión**: 2026-05-25 — Save #11 — **Fase 9 rediseño v4 (formato compacto) implementado + consulta operativa Romi resuelta**. Reescritos `lib/tickets/styles.ts` y `lib/tickets/render.ts` enteros. Ajustados `lib/tickets/queries.ts` (sin `totalTickets`/`estimatedSheets`) y `app/admin/tickets/page.tsx` (6 columnas, subtitle global). Validado E2E con 4 casos (Alejandra Daglio cross-product, Fernando combo-only, Masseroni grande, batch 80 familias). Pendiente solo validación visual humana (Cmd+P + impresión física).
 - **Versiones previas de la documentación**: `old_docs/` (CLAUDE.md viejo, README, Historial, INTEGRACION_MERCADOPAGO, TUTORIAL_MERCADOPAGO, TEST_CONCURRENCIA)
 
 ---
@@ -109,11 +109,51 @@
 - [x] 9.5 Página admin `app/admin/tickets/page.tsx` con tabla de 80 familias + link a imprimir individual + botón batch - DEV
 - [x] 9.6 Validación E2E: lint+build verde, 3 casos manuales (rifa-only, combo-only, cross-product) + admin index + 404 - TEST
 - [x] 9.7 Script `scripts/generar-supermercado-csv.mjs` para generar CSV (UTF-8 BOM, delimitador `;`) con detalle por familia + totales - DEV
-- [ ] 9.8 Validación visual humana: Cmd+P, imprimir 1 hoja física A4, probar corte por líneas dashed - TEST
+- [x] 9.9 Rediseño v4 — formato compacto "1 papel por familia" (post 4 iteraciones de mockup) - DEV
+- [ ] 9.8 Validación visual humana: Cmd+P, imprimir 1 hoja física A4 — ahora del formato v4 - TEST
 
 ---
 
 ## Bitácora
+
+### 2026-05-25 — Save #11 (Fase 9 rediseño v4 formato compacto + consulta operativa Romi)
+- **Tareas completadas**: 9.9 rediseño v4 — formato "1 papel compacto por familia". Reescritos `lib/tickets/styles.ts` y `lib/tickets/render.ts` enteros. Ajustados `lib/tickets/queries.ts` (eliminado `totalTickets`/`estimatedSheets`) y `app/admin/tickets/page.tsx` (tabla con 6 columnas, subtitle con `~hojas A4` global). Validación E2E lint+build verde + curl en 4 casos. Atendida consulta de Romi (familias Cyderboim y Masseroni — ambas approved en BD, "mail de confirmación" no existe como feature, MP manda comprobante directamente).
+- **En progreso**: 9.8 validación visual humana (Cmd+P + impresión física de 1 hoja en A4 con el nuevo formato).
+- **Próxima tarea**: 9.8 validación visual humana del nuevo formato. Otros candidatos abiertos: Fase 8 (aviso timeout 15min), Fase 4.3 (anuncio colegio), familia Pérez Fernández (caso edge sin resolver).
+- **Bugs nuevos**: ninguno. **2do incidente operativo de cache stale `.next/`** (mismo de Save #10 + ahora): correr `npm run build` con dev server activo invalida los chunks de webpack del dev, errores `Cannot find module './XXX.js'` o `__webpack_modules__[moduleId] is not a function`. Fix: matar dev, `rm -rf .next`, relanzar. **Lección operativa nueva**: NO correr `npm run build` mientras `npm run dev` está activo. Build y dev usan el mismo `.next/` directory pero generan chunks distintos. Hacer build en isolation o parar dev primero.
+- **Acciones principales — Iteración de diseño con el usuario (4 mockups standalone)**:
+  - **v1**: 2 hojas separadas — control (3 por A4) + tickets recortables (~10 por A4). 80 control + 80 recorte = 160 hojas. Demasiado.
+  - **v2**: tickets ultra-compactos de 1 renglón cada uno (~25 por A4). 23 hojas recorte + 27 control = 50. Densidad máxima pero requiere recortar entre tickets.
+  - **v3**: 1 papel por familia (bloque continuo de renglones compactos), corte solo entre familias, bin-packing con `page-break-inside: avoid`. ~25 hojas recorte + 27 control = 52.
+  - **v4 (aprobado)**: control + entregable unificado en UN solo papel ultra-compacto (~20mm = 2 renglones) con checkboxes para cada item. ~7-8 hojas A4 total. La familia se lleva el papel; el colegio tilda los checkboxes al entregar. **Iteraciones de ajuste en v4**: agregada columna Tickets+Hojas en admin → quitada; agregado `$monto` en papel → quitado; agregado `ORD-xxx` en papel → quitado.
+  - Mockups guardados en `/tmp/mockup-tickets-v{1..4}.html` (efímeros, no commiteados).
+- **Acciones principales — Implementación v4 en repo**:
+  - `lib/tickets/styles.ts`: CSS completo nuevo. Variables STA se conservan. Clases viejas (`.hoja`-header, `.filete-dorado`, `.bloque-familia`, `.ticket.*`, `.ticket-numero`, `.ticket-info`, `.footer-hoja`) eliminadas. Clases nuevas: `.papel`, `.p-bar`, `.p-body`, `.p-l1`, `.p-l2`, `.p-familia`, `.p-student`, `.p-fam-block`, `.p-sep`, `.p-side`, `.p-firma`, `.p-group-label.{rifa,combo}`, `.p-divider`, `.chk-item.{combo,}`, `.chk.{combo,}`, `.p-escudo`, `.muted`. `@page A4 margin 0` + `page-break-inside: avoid` en `.papel`.
+  - `lib/tickets/render.ts`: helpers nuevos `abbreviateCombo()` (mapea "Sandwich de carne" → "S. carne"), `renderPapel()`, `renderFamiliaBlock()`, `renderRifaChip()`, `renderComboChip()`. `renderHoja(data)` y `renderBatch(allData)` mantienen firma pública: wrap document estándar + `<div class="hoja">` con N papeles adentro. El browser maneja paginación A4 vía `page-break-inside: avoid`.
+  - `lib/tickets/queries.ts`: tipo `TicketsSummaryRow` simplificado (sin `totalTickets`, sin `estimatedSheets`). Función helper `estimateSheets()` removida.
+  - `app/admin/tickets/page.tsx`: subtitle reescrito (`N familias · X números · Y combos · ~Z hojas A4`), tabla con 6 columnas (Apellido · Alumno · Curso · #Rifa · #Combos · Acción), fila TOTAL con colspan=3 + 2 nums + acción vacía.
+  - Endpoints `[orderId]/route.ts` y `batch/route.ts` y guard `NODE_ENV` sin cambios.
+- **Acciones principales — Consulta operativa de Romi (familias Cyderboim + Masseroni)**:
+  - **CYDERBOIM (Paola Regina De Decco)**: `ORD-RNczKM8-t-` approved, $32.000, MP payment 160359919274, nums #187 + #379 + 2 sandwiches chorizo. Pago confirmado en 21s.
+  - **MASSERONI (Barbara)**: `ORD-vji2WiR1AL` approved, $40.000, MP payment 160351447468, 10 números rifa + 1 carne + 1 empanadas. Pago confirmado en 4.5min.
+  - **El "mail de confirmación" no existe como feature** (Fase 3.2 descartada 2026-05-04). Las familias reciben el comprobante de MercadoPago, que MP envía directo. Si no llega: spam, email mal escrito en el form, o cuenta MP del comprador distinta del email del form.
+- **Decisiones de diseño tomadas**:
+  - **Formato "1 papel compacto por familia" como definitivo**: combinar entregable + control en un solo documento ahorra ~93% de hojas vs formato original. Patrón: barra azul + apellido grande + alumno/curso + chips con checkboxes para tildar entrega + escudo chico. La familia se lleva ese papel firmado al final del retiro.
+  - **Combos con nombres abreviados** ("S. carne", "S. chorizo", "3 empanadas") en chip — entran mejor cuando hay muchos en una línea. Mapeo en helper `abbreviateCombo`.
+  - **Sin `$monto`, sin `ORD-xxx`, sin fecha del sorteo** en el papel a pedido del usuario. El comprobante MP ya tiene esos datos.
+  - **Bin-packing implícito vía CSS**: no forzamos page-break entre familias. El browser ubica N papeles por hoja automáticamente, respetando `page-break-inside: avoid` en `.papel`.
+  - **Mockup-driven design**: 4 iteraciones de HTML standalone en `/tmp` con datos reales (Alejandra Daglio, Fernando, Masseroni, etc.) fueron eficientes para alinear con el usuario antes de tocar código del repo. Patrón replicable.
+- **Archivos modificados**:
+  - `lib/tickets/styles.ts` — rewrite completo.
+  - `lib/tickets/render.ts` — rewrite completo.
+  - `lib/tickets/queries.ts` — edit (revertido al estado del Save #10 después de haber agregado/quitado fields intermedios; net diff vs `d0fdab2` = 0).
+  - `app/admin/tickets/page.tsx` — edit (tabla simplificada + subtitle nuevo).
+  - **Meta**: ESTADO.md, MEMORIA.md (este save).
+- **Notas críticas**:
+  - **Cache stale al correr build con dev activo**: ocurrió 2 veces en esta sesión. Workaround consistente: `rm -rf .next` + relanzar dev. **Promover a CLAUDE.md** como regla operativa.
+  - **80 papeles en 99 KB** de HTML (vs 321 KB del formato original) confirma compresión real de datos por la simplicidad del render.
+  - **Pendiente validación visual humana** (9.8) — vísperas del evento del 29/05 (en 4 días).
+- **Stats sesión**: ~1.5h efectivas, 4 archivos modificados, 4 mockups iterativos en `/tmp`, 1 commit pendiente (este save), 0 deploys, 1 consulta operativa resuelta sin tocar BD.
 
 ### 2026-05-25 — Save #10 (Fase 9 módulo tickets local + CSV supermercado + consulta operativa)
 - **Tareas completadas**: 9.0 spec + plan aprobado · 9.1 queries Drizzle · 9.2 styles CSS print · 9.3 render HTML + escudo en cada ticket · 9.4 endpoints API single + batch · 9.5 página admin · 9.6 validación E2E lint+build+3 casos · 9.7 script CSV supermercado.

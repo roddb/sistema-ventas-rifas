@@ -18,6 +18,7 @@ export default async function AdminTicketsPage() {
   const rows = await getAdminTicketsSummary();
   const totalNums = rows.reduce((acc, r) => acc + r.numCount, 0);
   const totalCombos = rows.reduce((acc, r) => acc + r.comboUnitsCount, 0);
+  const estimatedSheets = Math.max(1, Math.ceil(rows.length / 10));
 
   return (
     <main style={styles.main}>
@@ -25,7 +26,7 @@ export default async function AdminTicketsPage() {
         <div>
           <h1 style={styles.h1}>Tickets — Rifa Solidaria STA 2026</h1>
           <p style={styles.subtitle}>
-            {rows.length} familias · {totalNums} números rifa · {totalCombos} unidades combo
+            {rows.length} familias · {totalNums} números rifa · {totalCombos} unidades combo · <strong>~{estimatedSheets} hojas A4 a imprimir</strong>
           </p>
         </div>
         <a href="/api/admin/tickets/batch" target="_blank" rel="noopener" style={styles.batchBtn}>
@@ -67,6 +68,12 @@ export default async function AdminTicketsPage() {
                 </td>
               </tr>
             ))}
+            <tr style={{ ...styles.tr, borderTop: '2px solid #C9A84C', background: '#FBF5E6', fontWeight: 600 }}>
+              <td style={styles.td} colSpan={3}>TOTAL ({rows.length} familias)</td>
+              <td style={styles.tdNum}>{totalNums}</td>
+              <td style={styles.tdNum}>{totalCombos}</td>
+              <td style={styles.td}></td>
+            </tr>
           </tbody>
         </table>
       )}

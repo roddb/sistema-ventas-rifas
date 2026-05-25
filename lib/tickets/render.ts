@@ -1,8 +1,6 @@
 import { ticketsStyles } from './styles';
 import type { OrderTicketData, FamilyIdentity, ComboTicket } from './queries';
 
-const SORTEO_DATE = '29 de mayo de 2026';
-
 function escapeHtml(input: string | null | undefined): string {
   if (input == null) return '';
   return String(input)
@@ -17,118 +15,89 @@ function padNumber(n: number): string {
   return String(n).padStart(4, '0');
 }
 
-function familyShortName(family: FamilyIdentity): string {
-  return escapeHtml(family.buyerName.trim());
+function abbreviateCombo(name: string): string {
+  const trimmed = name.trim();
+  const lower = trimmed.toLowerCase();
+  if (lower === 'sandwich de carne') return 'S. carne';
+  if (lower === 'sandwich de chorizo') return 'S. chorizo';
+  if (lower === '3 empanadas') return '3 empanadas';
+  return trimmed;
 }
 
-function familyDetailLine(family: FamilyIdentity): string {
-  const parts: string[] = [escapeHtml(family.buyerName.trim())];
+function renderFamiliaBlock(family: FamilyIdentity): string {
+  const apellido = escapeHtml(family.buyerName.trim());
   if (family.studentName && family.studentName.trim()) {
-    parts.push(escapeHtml(family.studentName.trim()));
+    let curso = '';
+    if (family.course && family.division) {
+      curso = ` · ${escapeHtml(family.course)}° ${escapeHtml(family.division)}`;
+    } else if (family.course) {
+      curso = ` · ${escapeHtml(family.course)}°`;
+    }
+    return `
+      <span class="p-familia">${apellido}</span>
+      <span class="p-sep">·</span>
+      <span class="p-student">${escapeHtml(family.studentName.trim())}${curso}</span>
+    `;
   }
-  if (family.course && family.division) {
-    parts.push(`${escapeHtml(family.course)}° ${escapeHtml(family.division)}`);
-  } else if (family.course) {
-    parts.push(`${escapeHtml(family.course)}°`);
-  }
-  return parts.join(' · ');
-}
-
-function renderHeaderInstitucional(): string {
   return `
-    <div class="filete-dorado"></div>
-    <div class="header-content">
-      <img src="/img/escudo-sta.png" alt="Escudo STA" class="escudo" />
-      <div class="wordmark">
-        <div class="institucion">SANTO TOMÁS DE AQUINO</div>
-        <div class="tagline">Rifa Solidaria 2026 · Hoja de boletos por familia</div>
-      </div>
-    </div>
+    <span class="p-familia">${apellido}</span>
+    <span class="p-sep">·</span>
+    <span class="p-student muted">(solo combos)</span>
   `;
 }
 
-function renderBloqueFamilia(family: FamilyIdentity): string {
-  const parts: string[] = [];
-  parts.push(`<span><b>Familia:</b> ${escapeHtml(family.buyerName.trim())}</span>`);
-  if (family.studentName && family.studentName.trim()) {
-    parts.push(`<span><b>Alumno/a:</b> ${escapeHtml(family.studentName.trim())}</span>`);
-  }
-  if (family.course && family.division) {
-    parts.push(`<span><b>Curso:</b> ${escapeHtml(family.course)}° ${escapeHtml(family.division)}</span>`);
-  } else if (family.course) {
-    parts.push(`<span><b>Curso:</b> ${escapeHtml(family.course)}°</span>`);
-  }
-  return `<div class="bloque-familia">${parts.join('')}</div>`;
+function renderRifaChip(number: number): string {
+  return `<span class="chk-item"><span class="chk"></span>${padNumber(number)}</span>`;
 }
 
-function renderTicketRifa(number: number, family: FamilyIdentity): string {
-  return `
-    <div class="ticket rifa">
-      <div class="ticket-main">
-        <div class="ticket-eyebrow">Boleto N°</div>
-        <div class="ticket-numero">${padNumber(number)}</div>
-      </div>
-      <div class="ticket-info">
-        <div class="principal">${familyDetailLine(family)}</div>
-        <span class="sub">Sorteo: ${SORTEO_DATE}</span>
-        <span class="sub">Conservar para reclamar premio</span>
-      </div>
-      <img src="/img/escudo-sta.png" alt="STA" class="ticket-escudo" />
-    </div>
-  `;
+function renderComboChip(combo: ComboTicket, idx: number, total: number): string {
+  const name = escapeHtml(abbreviateCombo(combo.comboNameSnapshot));
+  const sufijo = total > 1 ? ` ${idx}/${total}` : '';
+  return `<span class="chk-item combo"><span class="chk combo"></span>${name}${sufijo}</span>`;
 }
 
-function renderTicketCombo(combo: ComboTicket, idx: number, total: number, family: FamilyIdentity): string {
-  const canjeText = total === 1
-    ? 'Canje único'
-    : `Canje único — ${idx} de ${total}`;
-  return `
-    <div class="ticket combo">
-      <div class="ticket-main">
-        <div class="ticket-eyebrow">Combo</div>
-        <div class="ticket-combo-nombre">${escapeHtml(combo.comboNameSnapshot)}</div>
-      </div>
-      <div class="ticket-info">
-        <div class="principal">${familyShortName(family)} · ${canjeText}</div>
-        <span class="sub">Presentar en el stand para retirar</span>
-        <span class="sub">Válido sólo el día del evento</span>
-      </div>
-      <img src="/img/escudo-sta.png" alt="STA" class="ticket-escudo" />
-    </div>
-  `;
-}
+function renderPapel(data: OrderTicketData): string {
+  const totalNums = data.rifas.length;
+  const totalCombos = data.combos.reduce((acc, c) => acc + c.quantity, 0);
 
-function renderFooterHoja(family: FamilyIdentity): string {
-  return `
-    <div class="footer-hoja">
-      <span class="izq">STA · Rifa Solidaria 2026</span>
-      <span>Familia ${familyShortName(family)}</span>
-    </div>
-  `;
-}
-
-function renderHojaInner(data: OrderTicketData): string {
-  const ticketsRifa = data.rifas
-    .map((r) => renderTicketRifa(r.number, data.family))
-    .join('');
-
-  const ticketsCombo = data.combos
+  const rifaChips = data.rifas.map((r) => renderRifaChip(r.number)).join('');
+  const comboChips = data.combos
     .map((combo) =>
       Array.from({ length: combo.quantity }, (_, i) =>
-        renderTicketCombo(combo, i + 1, combo.quantity, data.family)
+        renderComboChip(combo, i + 1, combo.quantity)
       ).join('')
     )
     .join('');
 
+  const rifaGroup = totalNums > 0
+    ? `<span class="p-group-label rifa">Rifa <b>(${totalNums}):</b></span>${rifaChips}`
+    : '';
+  const comboGroup = totalCombos > 0
+    ? `<span class="p-group-label combo">Combos <b>(${totalCombos}):</b></span>${comboChips}`
+    : '';
+  const divider = totalNums > 0 && totalCombos > 0
+    ? `<span class="p-divider">·</span>`
+    : '';
+
   return `
-    <div class="hoja">
-      ${renderHeaderInstitucional()}
-      ${renderBloqueFamilia(data.family)}
-      <div class="tickets-container">
-        ${ticketsRifa}
-        ${ticketsCombo}
+    <div class="papel">
+      <div class="p-bar"></div>
+      <div class="p-body">
+        <div class="p-l1">
+          <div class="p-fam-block">
+            ${renderFamiliaBlock(data.family)}
+          </div>
+          <div class="p-side">
+            <span class="p-firma">Firma:____________</span>
+          </div>
+        </div>
+        <div class="p-l2">
+          ${rifaGroup}
+          ${divider}
+          ${comboGroup}
+        </div>
       </div>
-      ${renderFooterHoja(data.family)}
+      <img src="/img/escudo-sta.png" alt="STA" class="p-escudo" />
     </div>
   `;
 }
@@ -150,7 +119,7 @@ ${bodyHtml}
 
 export function renderHoja(data: OrderTicketData): string {
   return wrapDocument(
-    renderHojaInner(data),
+    `<div class="hoja">${renderPapel(data)}</div>`,
     `Tickets — Familia ${data.family.buyerName}`
   );
 }
@@ -158,10 +127,13 @@ export function renderHoja(data: OrderTicketData): string {
 export function renderBatch(allData: OrderTicketData[]): string {
   if (allData.length === 0) {
     return wrapDocument(
-      `<div style="padding:40px;text-align:center;font-family:sans-serif;color:#666">Sin órdenes para imprimir.</div>`,
+      `<div class="hoja"><div style="padding:40px;text-align:center;color:#666">Sin órdenes para imprimir.</div></div>`,
       'Tickets — Batch'
     );
   }
-  const hojas = allData.map(renderHojaInner).join('\n');
-  return wrapDocument(hojas, `Tickets — Batch (${allData.length} familias)`);
+  const papeles = allData.map(renderPapel).join('\n');
+  return wrapDocument(
+    `<div class="hoja">${papeles}</div>`,
+    `Tickets — Batch (${allData.length} familias)`
+  );
 }
