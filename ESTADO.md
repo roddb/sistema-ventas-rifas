@@ -5,8 +5,8 @@
 - **Repositorio**: https://github.com/roddb/sistema-ventas-rifas
 - **Producción**: https://sistema-ventas-rifas-kc5dasqukq-ue.a.run.app (Cloud Run, us-east1)
 - **Última edición productiva**: Septiembre–Octubre 2025 (rifa escolar 2025)
-- **Estado actual**: Reactivación 2026 — **Fase 7 CERRADA al 100%**. Carrito unificado en producción (revision `00018-62z`) validado E2E con compra real cross-product de Rosario (esposa de Rodrigo): $16.000 = 1 número rifa (#4) + 1 combo carne. Webhook MP firmado confirmó el pago en 29s. Anti-sobreventa intacta.
-- **Última sesión**: 2026-05-07 — Save #9 — **T43/7.E completada**. Validación E2E cross-product en BD productiva: ORD-DMA9_vLzKW approved, PUR-KL_U8YK_YU approved, COM-WOjHqoGp approved, raffle_numbers #4 sold. 4 events en event_logs todos con `typeof(created_at)=integer` (BUG-012 sin regresión). Primera compra real cross-product exitosa post-Fase 7. Próximo foco abierto: 5.C admin / 5.E logo / issues post-launch I-2/I-5/I-7.
+- **Estado actual**: Reactivación 2026 — **Fase 7 cerrada + Fase 9 (tickets) cerrada**. Producción cross-product operativa (revision `00018-62z`). Venta real explotó entre Save #9 y Save #10: de 1 a 80 orders approved, **$2.814.000 recaudados** (414 números rifa + 160 combos). Anti-sobreventa intacta (0 duplicados activos). **Módulo de impresión de tickets implementado** (local-only, `/admin/tickets`) y **CSV para el supermercado generado** (80 familias + totales) para compras del evento del 29/05.
+- **Última sesión**: 2026-05-25 — Save #10 — **Fase 9 (módulo tickets local) completa + CSV supermercado + atención de consulta operativa de Romi**. 5 archivos nuevos bajo `lib/tickets/` + `app/admin/tickets/` + `app/api/admin/tickets/`. Validado E2E con 3 casos representativos (Rosario rifa+combo, Fernando combo-only, Alejandra Daglio cross-product) + tabla admin de 80 familias. CSV `rifa-supermercado-2026-05-25.csv` generado via `scripts/generar-supermercado-csv.mjs`. Consultas BD para 2 familias (Cyderboim, Masseroni) confirmadas como approved.
 - **Versiones previas de la documentación**: `old_docs/` (CLAUDE.md viejo, README, Historial, INTEGRACION_MERCADOPAGO, TUTORIAL_MERCADOPAGO, TEST_CONCURRENCIA)
 
 ---
@@ -87,9 +87,87 @@
 - [x] 7.D Deploy + smoke prod automatizado completados (revision `00018-62z`). Backup BD pre-deploy + merge feature → main + 4 revisiones deployadas (00015 fix FK COM-xxx, 00016 cap removed + truncate, 00017 BUG-012 fix, 00018 fixes I-1 + I-3 post-auditoría). Smoke prod E2E con URL inspection MP API verde (lección BUG-010 cumplida). **Auditoría completa con 4 agents paralelos** (payment-flow-debugger + concurrency-validator + code-reviewer + db-migration-reviewer) — 0 critical, 7 important detectados, 3 fixeados pre-cierre (I-1 PUR- legacy FK + I-3 BUG-012 completo en 15 inserts event_logs + I-4 doc actualizada). 4 fixeados quedan para post-launch (UI race polling, UNIQUE purchase_numbers, batch UPDATE para N>50, refactor `tx: any`) - DEV
 - [x] 7.E Compra real cross-product validada 2026-05-07 con Rosario (esposa, no Rodrigo por seller=buyer). $16.000 = 1 número rifa (#4) + 1 combo carne. ORD-DMA9_vLzKW · PUR-KL_U8YK_YU · COM-WOjHqoGp · MP payment 157362532623 (account_money). Webhook firmado confirmó en 29s (created 09:16:42 → confirmed 09:17:11). Validación BD via Turso MCP: order/purchase/combo_purchase todos `approved`, raffle_number #4 `sold`, 4 events en event_logs con `typeof(created_at)=integer`. **Fase 7 cerrada al 100%** - TEST
 
+### Fase 8: Aviso visible del timeout de 15min (mitigación Scenario 2 cleanup-vs-webhook)
+> Plan: `docs/superpowers/plans/2026-05-13-fase-8-aviso-timeout-15min.md`. Origen: caso real familia Pérez Fernández 2026-05-07 (cliente pagó $49.000 con tarjeta a los ~57min, cron canceló a los 15min → webhook ORDER_PAYMENT_AFTER_CANCEL → familia perdió 2 de 4 nums). Bloqueo manual de 572+1707 resuelto 2026-05-13. Esta fase agrega UI preventiva. Solo UI (no toca backend/BD/concurrencia). Deploy en ventana de baja conectividad.
+
+- [x] 8.0 Plan aprobado opción B (aviso review + countdown intermedio) - DEV
+- [ ] 8.1 T1 Aviso en UnifiedReview bajo el total (~15 min) - DEV
+- [ ] 8.2 T2 Componente nuevo RedirectingScreen.tsx con countdown 15:00 + auto-redirect 4s (~1.5h) - DEV
+- [ ] 8.3 T3 Cablear RedirectingScreen en OrderFlow (nuevo step entre review y MP) (~45 min) - DEV
+- [ ] 8.4 T4 Verificación local: lint + build + flujo manual end-to-end (~30 min) - TEST
+- [ ] 8.5 T5 Backup BD + deploy Cloud Run en ventana baja conectividad + smoke prod (~30 min) - DEV
+- [ ] 8.6 T6 Cierre: actualizar ESTADO.md + MEMORIA.md + /save (~15 min) - DEV
+
+### Fase 9: Módulo de impresión de tickets — Rifa STA 2026 (local-only, 2026-05-25)
+> Spec: `TICKETS_PRINT_SPEC.md` (co-diseñado con cowork 2026-05-25). Plan: `~/.claude/plans/ok-vamos-con-a-proud-tide.md`. Decisión Opción A: local-only (no deploy a Cloud Run, no auth, guard `NODE_ENV=production → 404`). Genera HTML imprimible A4 con tickets troquelados (1 por número rifa, 1 por unidad de combo) agrupados por familia. Fecha sorteo hardcoded 29/05/2026.
+
+- [x] 9.0 Spec aprobado opción A + plan aprobado (verificación schema vía Turso MCP + lib/db/schema.ts) - DEV
+- [x] 9.1 `lib/tickets/queries.ts` con 3 funciones Drizzle (getAllApprovedOrderIds, getOrderForTicket, getAdminTicketsSummary) - DEV
+- [x] 9.2 `lib/tickets/styles.ts` con CSS print embebido (variables STA, A4, page-breaks) - DEV
+- [x] 9.3 `lib/tickets/render.ts` con renderHoja + renderBatch + helpers; escudo STA al final de cada ticket - DEV
+- [x] 9.4 Endpoints `app/api/admin/tickets/[orderId]` y `/batch` con guard NODE_ENV - DEV
+- [x] 9.5 Página admin `app/admin/tickets/page.tsx` con tabla de 80 familias + link a imprimir individual + botón batch - DEV
+- [x] 9.6 Validación E2E: lint+build verde, 3 casos manuales (rifa-only, combo-only, cross-product) + admin index + 404 - TEST
+- [x] 9.7 Script `scripts/generar-supermercado-csv.mjs` para generar CSV (UTF-8 BOM, delimitador `;`) con detalle por familia + totales - DEV
+- [ ] 9.8 Validación visual humana: Cmd+P, imprimir 1 hoja física A4, probar corte por líneas dashed - TEST
+
 ---
 
 ## Bitácora
+
+### 2026-05-25 — Save #10 (Fase 9 módulo tickets local + CSV supermercado + consulta operativa)
+- **Tareas completadas**: 9.0 spec + plan aprobado · 9.1 queries Drizzle · 9.2 styles CSS print · 9.3 render HTML + escudo en cada ticket · 9.4 endpoints API single + batch · 9.5 página admin · 9.6 validación E2E lint+build+3 casos · 9.7 script CSV supermercado.
+- **En progreso**: 9.8 validación visual humana (Cmd+P + impresión física + corte por troquelado) — pendiente del usuario.
+- **Próxima tarea**: foco abierto. Candidatos:
+  - **9.8** validación visual física del módulo de tickets (vísperas del evento 29/05).
+  - **Fase 8** (aviso timeout 15min) — sigue pendiente, no es bloqueante para el evento.
+  - **5.C** Panel admin (auth + export CSV) y **5.E** Logo STA — siguen abiertas pero no bloquean.
+- **Bugs nuevos**: ninguno. Sí hubo 2 incidentes operativos durante la sesión:
+  - **Cache stale `.next/`**: tras correr `npm run build` y luego `npm run dev` en la misma sesión, webpack runtime perdió chunks (`Cannot find module './276.js'`). Solucionado con `rm -rf .next` + restart. NO es bug de código, es operativa de Next.js dev.
+  - **Shell env override de `.env.local`**: el shell del dev tenía `TURSO_DATABASE_URL` apuntando a `planificador-docente` (otra BD), pisando el valor de `.env.local`. Es la lección 2026-05-04 ya documentada en CLAUDE.md. Workaround: arrancar dev con `set -a && source .env.local && set +a && npm run dev`. El script CSV usa `loadEnv({ override: true })` para evitar el mismo problema.
+- **Acciones principales — Verificación de actividad real entre Save #9 y Save #10 (18 días)**:
+  - Read-only Turso MCP: counts globales saltaron de 1 venta (Rosario, $16k) a **80 orders approved + $2.814.000 recaudados** (414 nums rifa + 160 combos). Anti-sobreventa intacta: 0 duplicados activos en purchase_numbers.
+  - Breakdown combos: 83 carne ($1.245.000) + 32 chorizo ($480.000) + 45 empanadas ($675.000) = 160 unidades / $2.400.000. Rifa: 414 nums × $1.000 = $414.000.
+  - 11/80 orders son combo-only (sin student data). 47 cross-product. 22 rifa-only.
+- **Acciones principales — Módulo de impresión de tickets Fase 1 (Fase 9)**:
+  - Brainstorming + spec del usuario con cowork → `TICKETS_PRINT_SPEC.md` (raíz). Co-diseño visual de hoja A4 con escudo STA, filete dorado, bloque familia, tickets troquelados (barra dorada para rifa, azul para combo), líneas dashed con label "CORTAR".
+  - Verificación de schema real via Turso MCP + `lib/db/schema.ts` antes de codear: `orders` tiene `buyerName`/`studentName`/`course`/`division` directos (no joins necesarios para identidad familia), `combo_purchase_items.unitPrice` (sin "Snapshot"), nullables manejados (orden combo-only sin student data).
+  - 5 archivos nuevos: `lib/tickets/{queries,styles,render}.ts`, `app/api/admin/tickets/[orderId]/route.ts`, `app/api/admin/tickets/batch/route.ts`, `app/admin/tickets/page.tsx`. Escudo `public/img/escudo-sta.png` copiado.
+  - **Decisión Opción A local-only**: módulo solo accesible vía `npm run dev`. Guard `if (process.env.NODE_ENV === 'production') return 404` en los 3 puntos de entrada como red de seguridad anti-deploy accidental. Cero modificación al flujo productivo (rifa/combos/MP/webhook intactos).
+  - Validación E2E con 3 casos: rifa-only, combo-only (Fernando Franco — sin alumno/curso), cross-product (Rosario, Alejandra Daglio con 3 nums + 3 combos). Renderizado de "Canje único — N de M" para quantity > 1 verificado.
+  - Hot-fix en sesión: a pedido del usuario, escudo STA agregado al final de cada renglón de ticket (16mm × 16mm, object-fit contain). CSS `.ticket-escudo` agregado.
+  - 1 ajuste TypeScript build (`Parameter 'r' implicitly has 'any' type` en getAdminTicketsSummary) → tipo explícito en la map. 1 fix SQL (`ambiguous column name: id` en subqueries) → reescrito con 3 queries separadas + merge en JS via Map.
+- **Acciones principales — CSV supermercado**:
+  - `scripts/generar-supermercado-csv.mjs` (4 KB) con queries libSQL + format CSV con BOM UTF-8 y delimitador `;` (Excel ES default).
+  - Genera `rifa-supermercado-{date}.csv` en raíz (gitignored por `*.csv`).
+  - Columnas: Order ID · Familia · Alumno/a · Curso · Cant. Números · Números · Sandwich Carne · Sandwich Chorizo · 3 Empanadas · Total combos · Total $ · Fecha pago. Última fila con TOTALES.
+  - Resumen output: 80 familias · 414 nums · 83 carne · 32 chorizo · 45 empanadas · 160 combos · $2.814.000.
+  - **Nota informativa al colegio**: familia Pérez Fernández (ORD-fewD3xzB3j) pagó $49.000 con tarjeta pero su order quedó cancelled en BD (caso documentado 2026-05-07). Si la familia se presenta al evento, esperan +3 sandwiches de carne. Total ajustado real: 86 carne. Decisión de qué hacer queda en el usuario; el módulo y el CSV reflejan solo lo aprobado en BD.
+- **Acciones principales — Consulta operativa de Romi**:
+  - 2 familias reportaron no recibir email de confirmación. Verificación Turso MCP: **ambas approved en BD**, MP payment IDs presentes, todos los datos consistentes.
+  - Familia Cyderboim (Paola Regina De Decco, `ORD-RNczKM8-t-`): $32.000, nums #187 y #379 + 2 sandwiches chorizo. Aprobado en 21s. Email: prdedecco@gmail.com.
+  - Familia Masseroni (Barbara, `ORD-vji2WiR1AL`): $40.000, 10 números rifa + 1 carne + 1 empanadas. Aprobado en 4.5min. Email: barbi.masseroni@gmail.com.
+  - El "mail de confirmación" no existe como feature del sistema (Fase 3.2 fue descartada 2026-05-04). Lo que las familias reciben es el comprobante de MercadoPago, que MP manda automáticamente desde MP. Si no llega, es spam/email mal escrito en form/cuenta MP distinta del email form. Texto sugerido para Romi compartido al usuario.
+- **Archivos modificados / creados**:
+  - **Server-side**: `lib/tickets/queries.ts` (nuevo), `lib/tickets/styles.ts` (nuevo), `lib/tickets/render.ts` (nuevo).
+  - **API routes**: `app/api/admin/tickets/[orderId]/route.ts` (nuevo), `app/api/admin/tickets/batch/route.ts` (nuevo).
+  - **UI admin**: `app/admin/tickets/page.tsx` (nuevo).
+  - **Scripts**: `scripts/generar-supermercado-csv.mjs` (nuevo).
+  - **Assets**: `public/img/escudo-sta.png` (nuevo).
+  - **Specs**: `TICKETS_PRINT_SPEC.md` (nuevo).
+  - **.gitignore**: agregados `*.xlsx`, `*.xls`, `~$*` (preventivamente para data exports y lockfiles Excel).
+  - **Meta**: ESTADO.md, MEMORIA.md.
+  - **Output gitignored**: `rifa-supermercado-2026-05-25.csv` (9 KB, 80 familias + total).
+- **Decisiones de diseño tomadas**:
+  - **Local-only para módulos admin con PII**: en lugar de basic auth en producción, módulo accesible solo via `npm run dev` + guard NODE_ENV=production → 404. Cero exposición de PII de menores en internet, cero riesgo de deploy accidental. Patrón replicable para futuros módulos admin one-shot.
+  - **Schema verification vs spec antes de codear**: lección operativa — siempre verificar el schema real (PRAGMA / lib/db/schema.ts) antes de escribir queries en módulos nuevos. El spec del cowork tenía 3 diferencias menores con la realidad que fueron capturadas en 1 sola query MCP, evitando bugs runtime.
+  - **Escudo en cada ticket** (decisión visual del usuario durante validación): refuerza identidad institucional en cada papelito troquelado, no solo en el header.
+- **Notas críticas**:
+  - **Producción no tocada**: el módulo nuevo agrega rutas (`/admin/tickets`, `/api/admin/tickets/*`) pero NO se va a deployar. Si por error se merge a main y se deploya, los guards NODE_ENV=production retornan 404 automáticamente. Riesgo de exposición de PII = 0.
+  - **Issue M-9 sigue abierto** (back desde review crea purchase zombie) — pendiente Fase 8.
+  - **Cron cleanup operativo verificado**: 0 orders pending acumulados al cierre. BUG-012 sin regresión.
+  - **El evento es en 4 días** (29/05). Próximos pasos no técnicos: imprimir hojas físicas, enviar Excel al colegio, definir qué hacer con familia Pérez Fernández.
+- **Stats sesión**: ~2.5h efectivas, 8 archivos nuevos, 0 commits productivos (todo en módulo separado), 0 deploys, 0 cargo extra GCP, 80 ventas reales verificadas en producción, 2 consultas operativas resueltas.
 
 ### 2026-05-07 — Save #9 (Fase 7.E cerrada — primera compra real cross-product E2E)
 - **Tareas completadas**: 7.E (T43) compra real cross-product validada en BD productiva con Rosario (esposa). Fase 7 cerrada al 100%.

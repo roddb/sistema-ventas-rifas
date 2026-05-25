@@ -3,13 +3,19 @@
 ## Proyecto: Sistema de Ventas de Rifas Escolares
 ## Repositorio: https://github.com/roddb/sistema-ventas-rifas
 ## Producción: https://sistema-ventas-rifas-kc5dasqukq-ue.a.run.app (Cloud Run, us-east1)
-## Último save: 2026-05-07 — Save #9 (Fase 7.E cerrada — primera compra real cross-product E2E con Rosario)
+## Último save: 2026-05-25 — Save #10 (Fase 9 módulo tickets local + CSV supermercado + verificación venta real $2.8M)
 
 ---
 
 ## Contexto Actual
 
-**Fase 7 cerrada al 100% el 2026-05-07** con la primera compra real cross-product validada E2E. Producción opera en revision `sistema-ventas-rifas-00018-62z` (carrito unificado rifa+combos). Compra de Rosario (esposa de Rodrigo, no Rodrigo por seller=buyer): $16.000 = 1 número rifa (#4) + 1 combo carne. Webhook MP firmado confirmó pago en 29s (created 09:16:42 → confirmed 09:17:11). Validación BD: ORD-DMA9_vLzKW + PUR-KL_U8YK_YU + COM-WOjHqoGp todos `approved`, raffle_numbers #4 `sold`, 4 events en event_logs todos con `typeof(created_at)=integer` (BUG-012 sin regresión). Counts post-Save 9: 1 raffle, 1999 raffle_numbers available + 1 sold (Rosario), 1 order approved + 46 cancelled, 1 purchase approved + 43 cancelled, 1 combo_purchase approved + 31 cancelled. **Anti-sobreventa intacta**: 0 active duplicates. Sistema operativo para comunicación al colegio (Fase 4.3).
+**Save #10 el 2026-05-25 (4 días antes del evento del 29/05)**. Entre Save #9 (2026-05-07, primera venta real $16k) y hoy, la rifa explotó: **80 orders approved, $2.814.000 recaudados** (414 nums rifa de 2.000 disponibles = 20,8% del stock + 160 combos = 83 carne + 32 chorizo + 45 empanadas). Distribución: 47 cross-product + 22 rifa-only + 11 combo-only. Anti-sobreventa intacta (0 duplicados activos en `purchase_numbers`). Producción cross-product sigue en revision `00018-62z` sin regresiones; cron cleanup operativo (0 pending acumulados); BUG-012 sin regresión (event_logs con typeof=integer en uso real).
+
+**Fase 9 (Módulo de impresión de tickets) implementada en esta sesión (local-only)**: 5 archivos nuevos bajo `lib/tickets/` + `app/admin/tickets/` + `app/api/admin/tickets/`. Decisión Opción A: solo accesible via `npm run dev`, con guard `NODE_ENV=production → 404` en los 3 puntos de entrada como red de seguridad. Cero modificación al flujo productivo. Genera HTML imprimible A4 con 1 ticket troquelado por número de rifa (barra dorada) + 1 por unidad de combo (barra azul), agrupados por familia, con escudo STA al final de cada renglón y línea dashed "CORTAR" entre tickets. Fecha sorteo hardcoded "29 de mayo de 2026". Spec en `TICKETS_PRINT_SPEC.md` (co-diseñado con cowork 2026-05-25). Validado E2E con 3 casos (rifa-only, combo-only, cross-product) + admin index de 80 familias. Lint+build verde. Pendiente solo validación visual humana (Cmd+P + impresión física).
+
+**CSV para el supermercado** generado en esta sesión: `scripts/generar-supermercado-csv.mjs` (lectura read-only via libSQL) → `rifa-supermercado-2026-05-25.csv` (gitignored). Formato Excel-friendly con BOM UTF-8 + delimitador `;`. Columnas: Order ID · Familia · Alumno/a · Curso · Cant. Números · Números · Sandwich Carne · Sandwich Chorizo · 3 Empanadas · Total combos · Total $ · Fecha pago + fila TOTAL al final. Para enviar al colegio para que sepan cuánto comprar de cada combo.
+
+**Caso edge fuera de banda — familia Pérez Fernández** (`ORD-fewD3xzB3j`, cancelled en BD, pago real $49.000): pagaron 4 nums + 3 sandwiches de carne, pero el cron canceló el order y el bloqueo manual del 2026-05-13 solo arregló 2 nums (#572, #1707) sin re-aprobar el combo_purchase. Si la familia se presenta el día del evento, esperan +3 carne adicionales que NO están reflejados ni en los tickets ni en el CSV del super. Decisión pendiente: agregar manualmente al pedido del super o resolver inconsistencia en BD.
 
 **Fase 7 — Carrito unificado rifa + combos (CERRADA AL 100% el 2026-05-07)**:
 - **7.0 Brainstorming + spec + plan** ✅ 13 decisiones cerradas en sesión 2026-05-06. Spec `docs/superpowers/specs/2026-05-06-carrito-unificado-design.md` (556 líneas). Plan `docs/superpowers/plans/2026-05-06-carrito-unificado-fase-7.md` (3.331 líneas, 43 tasks).

@@ -53,6 +53,9 @@ Thumbs.db
 
 # Data exports (contienen PII de compradores — NUNCA versionar)
 *.csv
+*.xlsx
+*.xls
+~$*
 numeros_disponibles_venta.txt
 
 # Backups de BD productiva (contienen PII completa — NUNCA versionar)
