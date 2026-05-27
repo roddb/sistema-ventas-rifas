@@ -55,6 +55,7 @@ Thumbs.db
 *.csv
 *.xlsx
 *.xls
+*.pdf
 ~$*
 numeros_disponibles_venta.txt
 

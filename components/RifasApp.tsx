@@ -4,6 +4,10 @@ import { useState, useEffect, useCallback } from 'react';
 import PageContainer from './layout/PageContainer';
 import ProductSplitHero from './hero/ProductSplitHero';
 import OrderFlow from './order/OrderFlow';
+import SalesClosedScreen from './SalesClosedScreen';
+
+// Cierre automático de ventas. ART = UTC-3.
+const SALES_CLOSE_TS = new Date('2026-05-27T00:00:00-03:00').getTime();
 
 // === Re-exported types (kept for backward-compat while old components still exist) ===
 
@@ -45,6 +49,19 @@ export default function RifasApp() {
   const [orderId, setOrderId] = useState<string | undefined>();
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [salesClosed, setSalesClosed] = useState(() => Date.now() >= SALES_CLOSE_TS);
+
+  // Vigilar el cruce de las 00:00 sin requerir refresh manual.
+  useEffect(() => {
+    if (salesClosed) return;
+    const remaining = SALES_CLOSE_TS - Date.now();
+    if (remaining <= 0) {
+      setSalesClosed(true);
+      return;
+    }
+    const id = setTimeout(() => setSalesClosed(true), remaining + 500);
+    return () => clearTimeout(id);
+  }, [salesClosed]);
 
   const loadConfig = useCallback(async () => {
     try {
@@ -110,6 +127,11 @@ export default function RifasApp() {
     }
   }, []);
 
+  // Hard gate: cierre por fecha. Aparece incluso si la API está caída.
+  if (salesClosed) {
+    return <SalesClosedScreen />;
+  }
+
   if (isLoading) {
     return (
       <PageContainer>
@@ -128,6 +150,11 @@ export default function RifasApp() {
         </div>
       </PageContainer>
     );
+  }
+
+  // Soft gate: switch manual vía BD (UPDATE raffles SET is_active=false).
+  if (!raffleConfig.isActive) {
+    return <SalesClosedScreen />;
   }
 
   if (view === 'home') {

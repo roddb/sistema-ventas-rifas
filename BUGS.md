@@ -2,13 +2,13 @@
 
 ## Proyecto: Sistema de Ventas de Rifas Escolares
 ## Iniciado: 2025-09-11
-## Última actualización: 2026-05-06
+## Última actualización: 2026-05-27
 
 ---
 
 ## Resumen
-- **Total bugs registrados**: 13
-- **Resueltos**: 13
+- **Total bugs registrados**: 14
+- **Resueltos**: 14 (todos vía workaround operativo donde no aplica fix de código)
 - **Pendientes**: 0
 
 > Histórico migrado desde `old_docs/Historial.md` (sesión inaugural 2025-09-11). A partir de la reactivación 2026-05-01, los nuevos bugs se numeran BUG-006+.
@@ -16,6 +16,20 @@
 ---
 
 ## Registro Detallado
+
+### BUG-014 | RESUELTO (workaround operativo, no fixable en código)
+- **Fecha detectado**: 2026-05-25 (Save #10, 1a vez), recurrente Save #11 + Save #12 (3a ocurrencia)
+- **Fecha resuelto**: 2026-05-25 (workaround estable; promovido a regla operativa el 2026-05-27)
+- **Descripción**: Correr `npm run build` con el dev server activo invalida los chunks de webpack del dev. Errores típicos en el browser después: `Cannot find module './XXX.js'`, `__webpack_modules__[moduleId] is not a function`, o el endpoint devuelve 500 con mensaje raro sobre módulos faltantes.
+- **Contexto**: Save #12 — durante intento de generar PDF de comprobantes vía Chrome headless contra `/api/admin/tickets/batch`, el dev server ya estaba activo cuando el `stop-quality-gate` hook corrió automáticamente `npm run build` al cerrar agents anteriores. Los chunks del dev quedaron inconsistentes con los del build y `/api/raffle/config` empezó a devolver 500 con error de Drizzle "no such table: raffles" (que es engañoso — la causa real era los chunks rotos, no la BD).
+- **Error/Síntoma**: `GET /api/raffle/config 500` con stack de webpack apuntando a chunks inexistentes. Recargar la página no soluciona; matar dev y relanzar tampoco si el `.next/` quedó corrupto.
+- **Causa raíz**: Next.js dev (HMR) y `next build` usan el mismo directorio `.next/` pero generan chunks con hashes diferentes. Cuando build sobrescribe los chunks que dev tenía cacheados, dev queda apuntando a hashes que ya no existen en disco. Limitación arquitectónica de Next.js, no bug del proyecto.
+- **Solución aplicada (workaround)**: `lsof -ti :3000 | xargs kill -9 && rm -rf .next && npm run dev`. Matar dev, borrar `.next/` completo, relanzar. Cero data perdida (todo es regenerable desde el código). No existe fix de código posible para este problema, solo disciplina operativa.
+- **Regla operativa promovible a CLAUDE.md**: **NO correr `npm run build` mientras `npm run dev` está activo**. Si necesitás validar build durante una sesión de dev, parar dev primero (`lsof -ti :3000 | xargs kill -9`), correr build, y después relanzar dev si lo necesitás. Especial cuidado con hooks automáticos (stop-quality-gate) que pueden correr build sin advertencia.
+- **Archivos afectados**: ninguno (operativa, no de código).
+- **Aprendizaje**: 3 ocurrencias en 3 sesiones distintas confirman que esto no es accidente. El stop-hook que ejecuta `npm run build` puede dispararse cuando hay un dev server activo, generando este conflicto silencioso. Considerar agregar guard en el hook que detecte si el puerto 3000 está ocupado y skipee el build (alternativa para futuro: usar `BUILD_DIR=.next-build` en build vs `.next` en dev, pero requiere reconfig de Next).
+
+---
 
 ### BUG-013 | RESUELTO
 - **Fecha detectado**: 2026-05-06 (Fase 7.D pre-deploy, run 1/3 de concurrency tests)

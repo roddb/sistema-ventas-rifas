@@ -5,8 +5,8 @@
 - **Repositorio**: https://github.com/roddb/sistema-ventas-rifas
 - **Producción**: https://sistema-ventas-rifas-kc5dasqukq-ue.a.run.app (Cloud Run, us-east1)
 - **Última edición productiva**: Septiembre–Octubre 2025 (rifa escolar 2025)
-- **Estado actual**: Reactivación 2026 — **Fase 7 cerrada + Fase 9 (tickets) rediseñada con v4**. Producción cross-product operativa (revision `00018-62z`). 80 orders approved, $2.814.000 recaudados. Anti-sobreventa intacta. **Módulo de impresión de tickets reescrito al formato "1 papel compacto por familia"** tras 4 iteraciones de mockup con el usuario: cada familia recibe un papel ~20mm de alto con apellido + alumno/curso + checkboxes por cada número rifa y unidad combo + escudo STA + línea de firma. ~7-8 hojas A4 para imprimir las 80 familias (vs 122 del formato original = 93% menos).
-- **Última sesión**: 2026-05-25 — Save #11 — **Fase 9 rediseño v4 (formato compacto) implementado + consulta operativa Romi resuelta**. Reescritos `lib/tickets/styles.ts` y `lib/tickets/render.ts` enteros. Ajustados `lib/tickets/queries.ts` (sin `totalTickets`/`estimatedSheets`) y `app/admin/tickets/page.tsx` (6 columnas, subtitle global). Validado E2E con 4 casos (Alejandra Daglio cross-product, Fernando combo-only, Masseroni grande, batch 80 familias). Pendiente solo validación visual humana (Cmd+P + impresión física).
+- **Estado actual**: **Rifa CERRADA al 27/05/2026 00:00 ART**. 145 orders approved · 720 nums vendidos · 272 combos · **$4.798.000 recaudados** (+65 ventas / +$1.984k desde Save #11). Producción Cloud Run revision `00020-khp` mostrando cartel "¡Gracias por participar!" + `raffles.is_active=0` en BD. Triple defensa de cierre: gate fecha hardcoded en cliente + flag BD + UPDATE manual. **4 entregables para la jefa generados**: PDF comprobantes 145 familias (8 hojas A4 v4) + CSV supermercado actualizado + Reporte Flor (timeline + breakdown método pago) + PDF papeletas sorteo 720 nums (4 hojas para recortar y meter en bolsa). **Proyecto hermano Bingo Escolar rehosteado + rebrandeado** (claymorphism indigo + Baloo 2 + físicas Framer Motion + canvas-confetti + Web Audio API + botón ¡BINGO! con modal) — corre en https://bingo-escolar-kc5dasqukq-ue.a.run.app (revision `bingo-escolar-00002-tgx`, repo público `roddb/bingo-escolar`, mismo proyecto GCP).
+- **Última sesión**: 2026-05-27 — Save #12 — **Cierre de ventas + 4 entregables jefa + bingo rehosting + rebranding v2**. Cartel cierre auto-activado a las 00:00 ART (sin requerir intervención manual). 145 ventas finales validadas; las 4 que confundí inicialmente como "post-cierre" en realidad pagaron entre 21:11 y 22:18 ART del 26/05 (error mío de TZ: el CSV reporte_flor usa SQLite `localtime` que se interpretó como UTC). Bingo migrado de Vercel-pausado a Cloud Run + repo nuevo + rebranding completo en una sesión (~3h efectivas).
 - **Versiones previas de la documentación**: `old_docs/` (CLAUDE.md viejo, README, Historial, INTEGRACION_MERCADOPAGO, TUTORIAL_MERCADOPAGO, TEST_CONCURRENCIA)
 
 ---
@@ -110,11 +110,86 @@
 - [x] 9.6 Validación E2E: lint+build verde, 3 casos manuales (rifa-only, combo-only, cross-product) + admin index + 404 - TEST
 - [x] 9.7 Script `scripts/generar-supermercado-csv.mjs` para generar CSV (UTF-8 BOM, delimitador `;`) con detalle por familia + totales - DEV
 - [x] 9.9 Rediseño v4 — formato compacto "1 papel por familia" (post 4 iteraciones de mockup) - DEV
-- [ ] 9.8 Validación visual humana: Cmd+P, imprimir 1 hoja física A4 — ahora del formato v4 - TEST
+- [x] 9.8 Validación visual humana: hecha via Chrome headless `--print-to-pdf` (8 hojas A4, 945 KB, 145 papeles) - TEST
+
+### Fase 10: Cierre de ventas + entregables para la jefa (2026-05-27)
+> Cierre time-sensitive a las 00:00 ART del 27/05 (22 min de runway desde el pedido del usuario). Triple defensa: gate fecha hardcoded en cliente + flag BD + UPDATE manual a las 00:00:30. Cero usuarios afectados.
+
+- [x] 10.1 `components/SalesClosedScreen.tsx` (nuevo) + gate doble en `RifasApp.tsx` (`SALES_CLOSE_TS` constante + `useState` lazy init + setTimeout para cruzar 00:00 sin refresh + check `raffleConfig.isActive` post-fetch) - DEV
+- [x] 10.2 Lint+build verde local (15s) - TEST
+- [x] 10.3 Deploy Cloud Run revision `00020-khp` (build container 2:42 min, smoke verde) - DEV
+- [x] 10.4 UPDATE `raffles SET is_active=0 WHERE id=2` aplicado vía Turso MCP a las 00:01:56 ART (red de seguridad post-cierre, el gate de fecha ya había disparado a las 00:00) - DEV
+- [x] 10.5 PDF comprobantes 145 familias generado vía Chrome headless (`/api/admin/tickets/batch` → `--print-to-pdf`), 8 hojas A4, 945 KB - DEV
+- [x] 10.6 Reporte Flor: nuevo `scripts/generar-reporte-flor.mjs` (145 ventas con timeline + breakdown método pago: 47% crédito $2.239k · 34% MP $1.618k · 20% débito $941k) - DEV
+- [x] 10.7 PDF papeletas sorteo: nuevo `scripts/generar-papeletas-pdf.mjs` (720 cuadraditos 15mm × 15mm con borde dashed, 4 hojas A4, 510 KB, para recortar y meter en bolsa) - DEV
+- [x] 10.8 CSV supermercado regenerado actualizado (145 familias vs 80 previas; 720 nums; 135 carne + 56 chorizo + 81 empanadas = 272 combos) - DEV
+
+### Fase 11: Bingo Escolar — rehosting + rebranding (2026-05-27, proyecto hermano)
+> App `bingo-escolar-main/` (Next.js 14, client-side puro) estaba en Vercel pausado desde mayo/2026 (BUG-007 del rifas afectó workspace entero). Rehosting a Cloud Run + repo público + rebranding completo en una sesión. **Proyecto independiente, repo aparte**: `roddb/bingo-escolar`. Solo lo registramos acá como referencia cruzada — los archivos viven en `../bingo-escolar/`, no en este repo.
+
+- [x] 11.1 Rehosting: mover carpeta de adentro del repo rifas a hermana → `git init` + `gh repo create roddb/bingo-escolar --public` + `force push` + `chmod +x scripts/deploy.sh` + Dockerfile (multi-stage Node 20 slim, igual que rifas) + `next.config.js` con `output: 'standalone'`. Deploy revision `bingo-escolar-00001-w2x`. Bug del 1er deploy: COPY `/app/public` falló porque bingo no tenía `public/` → fix con `public/.gitkeep` - DEV
+- [x] 11.2 Rebranding v2: estilo **claymorphism** (recomendación de ui-ux-pro-max para "educational/playful") + paleta indigo `#4F46E5` + naranja CTA `#F97316` + tipografía Baloo 2 (`next/font/google`) + escudo STA local (cp del rifas) + 6 componentes nuevos (Bolillero/Tablero/Historial/BingoModal/AudioController/ConfettiCannon) + 2 libs (colors/sounds) + Framer Motion v11 spring physics + canvas-confetti (3 niveles) + Web Audio API (3 tonos sintéticos) + botón ¡BINGO! con pulse + Radix Dialog modal para registrar ganador + banner ganador efímero 30s + mute toggle persistente localStorage + `prefers-reduced-motion` global. Deploy revision `bingo-escolar-00002-tgx`. Bundle home 162 kB First Load. URL: https://bingo-escolar-kc5dasqukq-ue.a.run.app - DEV
 
 ---
 
 ## Bitácora
+
+### 2026-05-27 — Save #12 (Cierre rifa + 4 entregables jefa + bingo rehosting + rebranding v2)
+- **Tareas completadas**: 10.1 SalesClosedScreen + gate doble · 10.2 lint+build · 10.3 deploy `00020-khp` · 10.4 UPDATE BD `is_active=0` · 10.5 PDF comprobantes 145 familias · 10.6 reporte Flor (timeline + breakdown método pago) · 10.7 PDF papeletas 720 nums · 10.8 CSV super actualizado · 11.1 bingo rehosting Cloud Run + repo público · 11.2 bingo rebranding v2 (claymorphism + Baloo 2 + físicas Framer Motion + confetti + sound + botón BINGO).
+- **En progreso**: ninguna.
+- **Próxima tarea**: foco abierto. Candidatos post-evento (29/05):
+  - Caso Pérez Fernández (`ORD-fewD3xzB3j`): decidir si agregar manualmente los +3 carne al pedido del super (compraron $49k pero order cancelado en BD).
+  - Mejora opcional: regenerar reporte Flor con timestamps explícitos en ART (`datetime(updated_at, 'unixepoch', '-3 hours')` en lugar de `localtime`) para evitar confusión TZ futura.
+  - Fase 4.3 (anuncio colegio) — ya superado por el cierre.
+  - Fase 8 (aviso timeout 15min) — ya no aplicable (venta cerrada).
+  - 3.1 / 3.3 / 5.C panel admin con auth — postergables.
+- **Bugs nuevos**: BUG-014 (cache stale `.next` cuando build corre con dev activo, 3a ocurrencia — promovido a entrada formal en BUGS.md).
+- **Acciones principales — Cierre de ventas time-sensitive (~22 min runway)**:
+  - 23:37 ART el usuario pidió que a las 00:00 apareciera el cartel. Plan estructurado en 6 tasks + timer background con notificación al cruzar 00:00:30.
+  - **Gate doble**: `SALES_CLOSE_TS = new Date('2026-05-27T00:00:00-03:00').getTime()` evaluado por `useState` lazy initializer + setTimeout calculado con el remaining ms para cambiar el flag exactamente al cruzar la medianoche sin requerir refresh. Segundo gate: `if (!raffleConfig.isActive) return <SalesClosedScreen/>` post-fetch. HTML SSR sirve "Cargando…" como estado inicial, después hidrata.
+  - Deploy revision `00020-khp` completado 23:43:38 (2:42 min de container build, 17 min de margen sobre el cierre).
+  - Smoke verificado a las 23:44: `/api/raffle/config` `isActive=true`, home con hero normal, cartel NO presente (correcto pre-cierre).
+  - Timer background hasta 00:00:30 ART completó automáticamente.
+  - Smoke post-cierre: HTML inicial sirve "Cargando…" como estado SSR (no el hero); JS client-side evalúa los 2 gates y renderiza `<SalesClosedScreen/>` instantáneo.
+  - 00:01:56 ART: `UPDATE raffles SET is_active=0 WHERE id=2` aplicado vía Turso MCP. `rowsAffected: 1`. `/api/raffle/config` ahora devuelve `isActive: false` (red de seguridad adicional al gate de fecha).
+- **Acciones principales — 4 entregables para la jefa**:
+  - **CSV super actualizado** (`rifa-supermercado-2026-05-27.csv`, 16 KB): regeneración del script existente con 145 familias (vs 80 del Save #11). Totales: 720 nums rifa + 272 combos (135 carne + 56 chorizo + 81 empanadas) + $4.798.000.
+  - **Reporte Flor** (`scripts/generar-reporte-flor.mjs` NUEVO, `rifa-reporte-flor-2026-05-27.csv` 25 KB): 145 ventas con detalle order ID · familia · email · teléfono · alumno/curso · items · total · método pago · MP payment ID + totales por método (47% crédito $2.239k / 34% MP $1.618k / 20% débito $941k). Audit-friendly para Flor (caja).
+  - **PDF comprobantes 145 familias** (`comprobantes-rifa-2026-05-27.pdf`, 945 KB, 8 hojas A4): generado vía Chrome headless `--print-to-pdf` apuntando a `/api/admin/tickets/batch` con dev server local. ~18 familias por hoja en formato v4 compacto. Reemplaza la validación visual humana (9.8).
+  - **PDF papeletas sorteo** (`scripts/generar-papeletas-pdf.mjs` NUEVO, `papeletas-sorteo-2026-05-27.pdf`, 510 KB, 4 hojas A4): grid 12 columnas × 15mm × 15mm con borde dashed, 720 cuadraditos para recortar y meter en bolsa el día del sorteo. Query `WHERE status='sold'`, números 1-2000 con huecos (solo los vendidos).
+- **Acciones principales — Bingo Escolar (proyecto hermano, repo `roddb/bingo-escolar`)**:
+  - **Rehosting Cloud Run**: mover `bingo-escolar-main/` de adentro del repo rifas (donde estaba untracked) a carpeta hermana `../bingo-escolar/`. Resolver conflict markers del README, borrar `vercel.json` y `MCP_WORKFLOW_TEST.md`. Crear Dockerfile (multi-stage Node 20 slim, igual que rifas), `.dockerignore`, `next.config.js` con `output: 'standalone'`, `scripts/deploy.sh` simplificado (sin secrets ni env vars), `.eslintrc.json`. `git init` + force push sobre repo viejo de agosto/2025 + `gh repo edit --visibility public`. Deploy 1 falló por `COPY /app/public` (carpeta no existía) → fix `public/.gitkeep`. Deploy 2 (revision `bingo-escolar-00001-w2x`) verde. URL: https://bingo-escolar-kc5dasqukq-ue.a.run.app.
+  - **Rebranding v2** (plan aprobado en plan mode con 4 decisiones cerradas: claymorphism + confetti+sonido + botón BINGO con modal + logo STA local + uso proyector):
+    - Style: claymorphism (recomendación `ui-ux-pro-max`) con paleta indigo `#4F46E5` + naranja CTA `#F97316` + Baloo 2 (kid-friendly, leíble en proyector).
+    - Escudo STA copiado del rifas (cp `public/img/escudo-sta.png`).
+    - Refactor de `BingoEscolar.tsx` monolítico → orchestrator slim ~250 líneas + 6 componentes extraídos (Bolillero/Tablero/Historial/BingoModal/AudioController/ConfettiCannon) + 2 libs (`lib/colors.ts`, `lib/sounds.ts`).
+    - Físicas Framer Motion v11: Bolillero coreografiado (shake → spin custom bezier → settle spring), número que sale con drop spring (stiffness 280 damping 14), tablero con rotateY 360 + scale spring, historial stagger.
+    - `canvas-confetti` en 3 niveles (chico cada número, grande en múltiplos de 10, fullscreen en BINGO).
+    - Web Audio API con 3 tonos sintéticos generados con envelope ADSR (`playDraw` D5, `playTick` D6, `playBingo` arpegio C5-E5-G5-C6).
+    - Mute toggle persistente en `localStorage`.
+    - Radix Dialog modal para registrar ganador opcional + banner efímero 30s.
+    - Deploy revision `bingo-escolar-00002-tgx`. Bundle 162 kB First Load (+22 kB vs v1).
+- **Acciones principales — Verificación post-Save (consulta del usuario sobre las "4 ventas post-cierre")**:
+  - Usuario preguntó si las 4 ventas que mencioné como "post-cierre" estaban en los 4 archivos.
+  - Verificación cruzada Turso MCP con conversión TZ correcta: las 4 órdenes (Notte, Taboada, Guitart, Brenner) pagaron entre **21:11 y 22:18 ART del 26/05**, todas **dentro del horario de venta**. Mi error original: el CSV `reporte_flor` usa `datetime(updated_at, 'unixepoch', 'localtime')` y SQLite-libsql interpretó `localtime` como UTC (el cliente Node no propagó la TZ del shell). Los timestamps "00:11 / 00:28 / 00:31 / 01:18" del CSV están en UTC, equivalentes a 21:11/21:28/21:31/22:18 ART.
+  - grep cruzado confirmó las 4 órdenes presentes en CSV super (1 match c/u), reporte Flor (1 match c/u) y HTML del PDF de comprobantes (5 matches por apellidos).
+- **Decisiones de diseño / proceso tomadas**:
+  - **Gate doble (fecha hardcoded + flag BD)** para cierre time-sensitive de apps con dinero real. La fecha hardcoded actúa como red de seguridad: aunque yo no pueda hacer nada a la hora exacta, el cartel aparece. El flag BD es el switch manual reversible (para reabrir sin redeploy).
+  - **`useState(() => Date.now() >= TS)` + setTimeout(`remaining ms`)** para cruzar timestamps sin requerir refresh manual del usuario. Pattern replicable para countdowns/launch dates en React.
+  - **Cloud Run como hosting consistente** para apps client-side puras del workspace educativo (rifas + bingo + futuros). Mismo proyecto GCP, mismo billing, mismo patrón Docker. Overkill técnico (Cloudflare Pages sería más adecuado para static) pero gana en consistencia operativa.
+  - **Force push autorizado explícitamente por el usuario** para sobrescribir snapshot viejo de agosto/2025 en repo bingo. Decisión correcta porque el commit viejo tenía conflict markers sin resolver y nada de valor histórico.
+  - **Mover bingo-escolar-main fuera del repo rifas**: la carpeta nested dentro del repo rifas causaba que Next.js de rifas intentara compilar el bingo (stop-quality-gate failure). Fix arquitectónico: hermana del rifas, no nested. Más limpio y elimina el hack `tsconfig.exclude`.
+  - **Rebranding completo de una app legacy en plan mode** (con 4 preguntas críticas + design system de `ui-ux-pro-max` + write/exit ExitPlanMode): patrón eficiente para refactors visuales. Total ~3h efectivas para 8 componentes nuevos + 1 reescrito.
+- **Archivos modificados / creados (en este repo `Sistema de ventas de rifas/`)**:
+  - **UI**: `components/SalesClosedScreen.tsx` (nuevo), `components/RifasApp.tsx` (gate doble cierre).
+  - **Scripts**: `scripts/generar-reporte-flor.mjs` (nuevo), `scripts/generar-papeletas-pdf.mjs` (nuevo).
+  - **Meta**: ESTADO.md, MEMORIA.md, BUGS.md (este Save #12).
+  - **Outputs gitignored**: `comprobantes-rifa-2026-05-27.pdf` (945 KB), `rifa-supermercado-2026-05-27.csv` (16 KB), `rifa-reporte-flor-2026-05-27.csv` (25 KB), `papeletas-sorteo-2026-05-27.pdf` (510 KB).
+- **Notas críticas**:
+  - **Producción operativa**: revision `00020-khp` con cartel "¡Gracias por participar!" más subtítulo "El sorteo es el 29/05/2026". `raffles.is_active=0` en BD. Triple defensa activa. Cero ventas que aceptar.
+  - **Bingo operativo**: revision `bingo-escolar-00002-tgx` con rebranding completo. Listo para el 29/05.
+  - **Reporte Flor con TZ confusa**: el CSV se entrega con timestamps UTC marcados como "Fecha pago (ART)". Si Flor pregunta por horarios raros, decirle que reste 3h o regenerar el reporte con la query corregida (próxima iteración).
+- **Stats sesión**: ~3.5h efectivas, 145 ventas finales totales / $4.798.000 recaudados, 4 entregables generados, 2 deploys productivos exitosos en proyectos distintos (rifas + bingo), 2 revisions Cloud Run nuevas, 1 repo GitHub nuevo público.
 
 ### 2026-05-25 — Save #11 (Fase 9 rediseño v4 formato compacto + consulta operativa Romi)
 - **Tareas completadas**: 9.9 rediseño v4 — formato "1 papel compacto por familia". Reescritos `lib/tickets/styles.ts` y `lib/tickets/render.ts` enteros. Ajustados `lib/tickets/queries.ts` (eliminado `totalTickets`/`estimatedSheets`) y `app/admin/tickets/page.tsx` (tabla con 6 columnas, subtitle con `~hojas A4` global). Validación E2E lint+build verde + curl en 4 casos. Atendida consulta de Romi (familias Cyderboim y Masseroni — ambas approved en BD, "mail de confirmación" no existe como feature, MP manda comprobante directamente).
