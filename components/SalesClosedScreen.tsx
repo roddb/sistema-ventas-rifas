@@ -9,12 +9,9 @@ export default function SalesClosedScreen() {
           <h1 className="text-2xl font-bold text-ink mb-3">
             ¡Gracias por participar!
           </h1>
-          <p className="text-ink-muted text-base mb-6 leading-relaxed">
+          <p className="text-ink-muted text-base leading-relaxed">
             Las ventas de la rifa están cerradas.
           </p>
-          <div className="bg-brand/5 border border-brand/20 rounded-xl px-4 py-3 text-sm text-brand font-medium">
-            El sorteo es el <strong>29/05/2026</strong>
-          </div>
         </div>
       </div>
     </PageContainer>

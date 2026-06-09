@@ -3,11 +3,19 @@
 ## Proyecto: Sistema de Ventas de Rifas Escolares
 ## Repositorio: https://github.com/roddb/sistema-ventas-rifas
 ## Producción: https://sistema-ventas-rifas-kc5dasqukq-ue.a.run.app (Cloud Run, us-east1)
-## Último save: 2026-05-27 — Save #12 (Cierre rifa 00:00 ART + 4 entregables jefa + bingo rehosting + rebranding v2)
+## Último save: 2026-06-09 — Save #13 (Reset BD + reapertura para sede 2 + planificación Fase 12)
 
 ---
 
 ## Contexto Actual
+
+**Save #13 el 2026-06-09. El sistema fue RESETEADO y reabierto para la SEGUNDA SEDE del colegio** (mismo evento, distintos directores). El evento de la sede 1 ya terminó (29/05). Se reusó el mismo sitio/URL/Cloud Run + misma cuenta MercadoPago, reseteando la BD. Nueva rifa **id=3 "Rifa Escolar 2026 - Sede 2"**, 2000 números disponibles, **$1.000 c/u**, revision **`00021-fdd`**, **ventas abiertas**. Antes del reset se respaldaron las **8 tablas** de sede 1 (145 orders approved, $4.798.000, 4.568 filas) en `backups/rifa-sede1-final-backup-2026-06-09.json` (gitignored, PII). El script viejo `setup-rifa-2026.mjs` sólo cubría 5 tablas (pre-Fase 7), así que se escribió `scripts/reset-rifa-sede2.mjs` nuevo (8 tablas, orden DELETE FK-safe, atómico) revisado por `db-migration-reviewer` (APROBADO con observaciones). Se removió el gate de fecha hardcoded `SALES_CLOSE_TS` de sede 1 en `RifasApp.tsx` (sin eso, resetear la BD no alcanzaba: el cartel "cerrado" se mostraba igual). El cierre actual depende sólo del soft gate `is_active` hasta implementar la tarea 12.1. El Bingo Escolar no necesitó cambios (client-side puro, la sede 2 lo reusa tal cual).
+
+**Fase 12 PLANIFICADA, nada producido** (`docs/superpowers/plans/2026-06-09-fase-12-cambios-sede2.md`): 4 cambios pedidos por los directores de sede 2 vía WhatsApp. **12.1** cierre auto martes 30/6 23:59 ART (igual sede 1, gate UI hardcoded con fecha nueva). **12.2** combo de empanadas con selección de gustos: único combo = 2 empanadas + vaso de gaseosa a $15.000 (sandwiches carne/chorizo de sede 1 ELIMINADOS); el comprador elige N combos y reparte **exactamente N×2 empanadas** entre Carne y Jamón-y-queso (steppers con límite exacto); requiere columna `flavor` en `combo_purchase_items` (→ db-migration-reviewer) + reporte de cocina con totales por gusto. **12.3** impresión de tickets con el **alumno primero** (+curso) y el adulto comprador al lado (campo de alumno sigue único, sin separar apellido/nombre; el cambio es sólo en el render+orden). **12.4** talonario de rifas NO vendidas online para vender en la puerta, formato clásico (número impreso 2× con línea de corte) + branding del colegio (escudo/nombre/lema), pendiente de medidas exactas + lema. El pedido original #5 ("lista de gusto + cantidad") resultó ser el selector de gustos del combo y se fusionó en 12.2.
+
+---
+
+## Contexto Histórico (sede 1, evento 29/05/2026 — CERRADO)
 
 **Save #12 el 2026-05-27 (2 días antes del evento del 29/05). La rifa CERRÓ a las 00:00 ART del 27/05**. Cifras finales: **145 orders approved, $4.798.000 recaudados** (+65 ventas y +$1.984k desde Save #11 — el último día explotó con 57 ventas y $1.609k). 720 nums vendidos de 2.000 (36%) + 272 combos (135 carne + 56 chorizo + 81 empanadas). Anti-sobreventa intacta. Breakdown método pago: 47% tarjeta crédito · 34% dinero MP · 20% débito. Producción Cloud Run revision `00020-khp` mostrando cartel "¡Gracias por participar!" + `raffles.is_active=0` en BD. Triple defensa de cierre: gate fecha hardcoded en cliente + flag BD + UPDATE manual a las 00:00:30 ART.
 
