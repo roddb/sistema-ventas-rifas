@@ -56,9 +56,18 @@ export default function UnifiedReview(props: UnifiedReviewProps) {
             {props.combos.map((it) => {
               const c = getComboById(it.comboId);
               if (!c) return null;
+              const flavorLine = it.flavors
+                ? [
+                    it.flavors.carne ? `${it.flavors.carne} carne` : null,
+                    it.flavors.jyq ? `${it.flavors.jyq} jamón y queso` : null,
+                  ].filter(Boolean).join(' · ')
+                : null;
               return (
                 <div key={it.comboId} className="flex justify-between text-sm">
-                  <span>{c.name} × {it.quantity}</span>
+                  <div>
+                    <div>{c.name} × {it.quantity}</div>
+                    {flavorLine && <div className="text-xs text-ink-soft mt-0.5">{flavorLine}</div>}
+                  </div>
                   <span className="font-semibold">${(c.price * it.quantity).toLocaleString('es-AR')}</span>
                 </div>
               );

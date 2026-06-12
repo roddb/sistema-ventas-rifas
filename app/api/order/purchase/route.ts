@@ -21,6 +21,10 @@ const Schema = z.object({
   combos: z.array(z.object({
     comboId: z.string(),
     quantity: z.number().int().positive().max(50),
+    flavors: z.object({
+      carne: z.number().int().min(0),
+      jyq: z.number().int().min(0),
+    }).optional(),
   })).optional(),
 }).refine((d) => d.raffle || d.combos, { message: 'At least raffle or combos required' });
 
@@ -44,6 +48,9 @@ export async function POST(req: NextRequest) {
     const msg = e instanceof Error ? e.message : 'Unknown error';
     if (msg.includes('no disponible')) {
       return NextResponse.json({ success: false, error: msg }, { status: 409 });
+    }
+    if (msg.includes('empanadas por gusto')) {
+      return NextResponse.json({ success: false, error: msg }, { status: 400 });
     }
     console.error('[POST /api/order/purchase]', e);
     return NextResponse.json({ success: false, error: 'Internal error' }, { status: 500 });

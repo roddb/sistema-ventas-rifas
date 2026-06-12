@@ -1,7 +1,7 @@
 import { db, schema } from '../db';
 import { eq, and, lte } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
-import { calculateTotal, getComboById, type CartItem } from '../combos';
+import { calculateTotal, getComboById, isFlavorBreakdownValid, type CartItem } from '../combos';
 
 const { orders, purchases, comboPurchases, comboPurchaseItems, raffleNumbers, eventLogs, purchaseNumbers, raffles } = schema;
 
@@ -66,6 +66,16 @@ export class OrderService {
         ? input.combos!.filter((it) => it.quantity > 0 && getComboById(it.comboId))
         : [];
       if (hasCombos && validComboItems.length === 0) throw new Error('No valid combo items');
+
+      // Combo de empanadas: el desglose de gustos debe sumar EXACTAMENTE quantity × 2
+      // (anti-tampering: se valida server-side dentro de la tx, no se confía en el cliente).
+      for (const it of validComboItems) {
+        if (it.comboId === 'empanadas') {
+          if (!it.flavors || !isFlavorBreakdownValid(it.quantity, it.flavors)) {
+            throw new Error('La cantidad de empanadas por gusto debe sumar exactamente 2 por combo');
+          }
+        }
+      }
       const comboTotal = validComboItems.length > 0 ? calculateTotal(validComboItems) : 0;
       const totalAmount = raffleTotal + comboTotal;
 
@@ -166,6 +176,8 @@ export class OrderService {
             comboNameSnapshot: combo.name,
             unitPrice: combo.price,
             quantity: item.quantity,
+            // Solo el combo de empanadas guarda desglose de gustos (defensa: otros combos no lo persisten).
+            flavorBreakdown: combo.id === 'empanadas' && item.flavors ? JSON.stringify(item.flavors) : null,
             createdAt: now,
           });
         }

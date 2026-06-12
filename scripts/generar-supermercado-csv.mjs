@@ -42,19 +42,27 @@ async function main() {
     numsByOrder.get(oid).push(Number(row.number));
   }
 
+  // Sede 2: único combo de empanadas. quantity = nº de combos; el desglose de
+  // gustos (empanadas carne / jamón y queso) vive en flavor_breakdown (JSON).
   const combosRes = await client.execute(`
-    SELECT cp.order_id, cpi.combo_id, SUM(cpi.quantity) AS unidades
+    SELECT cp.order_id, cpi.combo_id, cpi.quantity, cpi.flavor_breakdown
     FROM combo_purchases cp
     JOIN combo_purchase_items cpi ON cpi.combo_purchase_id = cp.id
     WHERE cp.payment_status = 'approved' AND cp.order_id IS NOT NULL
-    GROUP BY cp.order_id, cpi.combo_id
   `);
   const combosByOrder = new Map();
   for (const row of combosRes.rows) {
     const oid = row.order_id;
-    if (!combosByOrder.has(oid)) combosByOrder.set(oid, { carne: 0, chorizo: 0, empanadas: 0 });
+    if (!combosByOrder.has(oid)) combosByOrder.set(oid, { combos: 0, carne: 0, jyq: 0 });
     const bucket = combosByOrder.get(oid);
-    bucket[row.combo_id] = Number(row.unidades);
+    bucket.combos += Number(row.quantity);
+    if (row.flavor_breakdown) {
+      try {
+        const f = JSON.parse(row.flavor_breakdown);
+        bucket.carne += Number(f.carne ?? 0);
+        bucket.jyq += Number(f.jyq ?? 0);
+      } catch { /* fila sin desglose válido: se ignora el gusto */ }
+    }
   }
 
   const cursoOf = (course, division) => {
@@ -65,7 +73,7 @@ async function main() {
 
   const rows = orders.map((o) => {
     const nums = numsByOrder.get(o.id) ?? [];
-    const combos = combosByOrder.get(o.id) ?? { carne: 0, chorizo: 0, empanadas: 0 };
+    const combos = combosByOrder.get(o.id) ?? { combos: 0, carne: 0, jyq: 0 };
     return {
       orderId: o.id,
       familia: (o.buyer_name ?? '').trim(),
@@ -73,10 +81,9 @@ async function main() {
       curso: cursoOf(o.course, o.division),
       cantNums: nums.length,
       numeros: nums.join(', '),
-      carne: combos.carne,
-      chorizo: combos.chorizo,
-      empanadas: combos.empanadas,
-      totalCombos: combos.carne + combos.chorizo + combos.empanadas,
+      combos: combos.combos,
+      empCarne: combos.carne,
+      empJyq: combos.jyq,
       totalPesos: Number(o.total_amount),
       paidAt: o.paid_at,
     };
@@ -85,14 +92,13 @@ async function main() {
   const totals = rows.reduce(
     (acc, r) => {
       acc.cantNums += r.cantNums;
-      acc.carne += r.carne;
-      acc.chorizo += r.chorizo;
-      acc.empanadas += r.empanadas;
-      acc.totalCombos += r.totalCombos;
+      acc.combos += r.combos;
+      acc.empCarne += r.empCarne;
+      acc.empJyq += r.empJyq;
       acc.totalPesos += r.totalPesos;
       return acc;
     },
-    { familias: rows.length, cantNums: 0, carne: 0, chorizo: 0, empanadas: 0, totalCombos: 0, totalPesos: 0 }
+    { familias: rows.length, cantNums: 0, combos: 0, empCarne: 0, empJyq: 0, totalPesos: 0 }
   );
 
   const DELIM = ';';
@@ -111,10 +117,9 @@ async function main() {
     'Curso',
     'Cant. Números',
     'Números',
-    'Sandwich Carne',
-    'Sandwich Chorizo',
-    '3 Empanadas',
-    'Total combos',
+    'Combos empanadas',
+    'Emp. Carne',
+    'Emp. Jamón y queso',
     'Total $',
     'Fecha pago',
   ];
@@ -129,10 +134,9 @@ async function main() {
       r.curso,
       r.cantNums,
       r.numeros,
-      r.carne || '',
-      r.chorizo || '',
-      r.empanadas || '',
-      r.totalCombos || '',
+      r.combos || '',
+      r.empCarne || '',
+      r.empJyq || '',
       r.totalPesos,
       r.paidAt,
     ].map(escape).join(DELIM));
@@ -146,10 +150,9 @@ async function main() {
     '',
     totals.cantNums,
     '',
-    totals.carne,
-    totals.chorizo,
-    totals.empanadas,
-    totals.totalCombos,
+    totals.combos,
+    totals.empCarne,
+    totals.empJyq,
     totals.totalPesos,
     '',
   ].map(escape).join(DELIM));
@@ -158,13 +161,13 @@ async function main() {
   writeFileSync(outPath, lines.join('\n'), 'utf-8');
   console.log(`[supermercado] CSV escrito en: ${outPath}`);
 
-  console.log('\n=== RESUMEN PARA SUPERMERCADO ===');
+  console.log('\n=== RESUMEN PARA SUPERMERCADO / COCINA ===');
   console.log(`Familias compradoras: ${totals.familias}`);
   console.log(`Total números rifa vendidos: ${totals.cantNums}`);
-  console.log(`Sandwich de carne: ${totals.carne}`);
-  console.log(`Sandwich de chorizo: ${totals.chorizo}`);
-  console.log(`3 empanadas: ${totals.empanadas}`);
-  console.log(`Total combos: ${totals.totalCombos}`);
+  console.log(`Combos de empanadas: ${totals.combos}`);
+  console.log(`Empanadas de carne: ${totals.empCarne}`);
+  console.log(`Empanadas de jamón y queso: ${totals.empJyq}`);
+  console.log(`Total empanadas: ${totals.empCarne + totals.empJyq}`);
   console.log(`Recaudación total: $${totals.totalPesos.toLocaleString('es-AR')}`);
 }
 

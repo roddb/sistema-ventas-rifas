@@ -37,6 +37,11 @@ export type Step = 'hero' | 'grid' | 'form' | 'review' | 'success' | 'failure' |
 
 const POLLING_INTERVAL_MS = 30000;
 
+// Sede 2: cierre automático de ventas online el martes 30/6/2026 a las 23:59 ART.
+// Hard gate client-side (igual que sede 1): aparece aunque la API esté caída.
+// El soft gate `is_active` (UPDATE manual en BD) sigue siendo la segunda defensa.
+const SALES_CLOSE_TS = new Date('2026-06-30T23:59:00-03:00').getTime();
+
 export default function RifasApp() {
   const [view, setView] = useState<'home' | 'order'>('home');
   const [entry, setEntry] = useState<'rifa' | 'combo'>('rifa');
@@ -46,6 +51,7 @@ export default function RifasApp() {
   const [orderId, setOrderId] = useState<string | undefined>();
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [salesClosed, setSalesClosed] = useState(() => Date.now() >= SALES_CLOSE_TS);
 
   const loadConfig = useCallback(async () => {
     try {
@@ -84,6 +90,19 @@ export default function RifasApp() {
     return () => clearInterval(id);
   }, [loadNumbers]);
 
+  // Cierre automático: programa el cambio de estado al cruzar SALES_CLOSE_TS
+  // sin requerir refresh del usuario. (18 días < límite ~24.8 días de setTimeout.)
+  useEffect(() => {
+    if (salesClosed) return;
+    const remaining = SALES_CLOSE_TS - Date.now();
+    if (remaining <= 0) {
+      setSalesClosed(true);
+      return;
+    }
+    const t = setTimeout(() => setSalesClosed(true), remaining);
+    return () => clearTimeout(t);
+  }, [salesClosed]);
+
   // Query params post-MP redirect
   // New unified format: ?payment=success|failure|pending&order=ORD-xxx
   // Legacy combo format: ?combo=success|failure|pending&order=COM-xxx (handled by same branch)
@@ -110,6 +129,12 @@ export default function RifasApp() {
       setView('order');
     }
   }, []);
+
+  // Hard gate de fecha: prioritario sobre cualquier otro estado (aparece aunque
+  // la API esté caída o la config no haya cargado).
+  if (salesClosed) {
+    return <SalesClosedScreen />;
+  }
 
   if (isLoading) {
     return (

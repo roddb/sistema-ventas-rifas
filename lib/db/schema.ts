@@ -110,5 +110,8 @@ export const comboPurchaseItems = sqliteTable('combo_purchase_items', {
   comboNameSnapshot: text('combo_name_snapshot').notNull(),
   unitPrice: real('unit_price').notNull(),
   quantity: integer('quantity').notNull(),
+  // Sede 2: desglose de gustos del combo de empanadas, JSON {"carne":x,"jyq":y}.
+  // Nullable: filas legacy (sandwiches sede 1) no lo tienen. quantity sigue = nº de combos.
+  flavorBreakdown: text('flavor_breakdown'),
   createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`)
 });

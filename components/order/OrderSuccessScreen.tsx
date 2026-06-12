@@ -64,7 +64,19 @@ export default function OrderSuccessScreen(props: OrderSuccessScreenProps) {
           <ul className="space-y-1 text-sm">
             {props.combos.map((it) => {
               const c = getComboById(it.comboId);
-              return c ? <li key={it.comboId}>· {c.name} × {it.quantity}</li> : null;
+              if (!c) return null;
+              const flavorLine = it.flavors
+                ? [
+                    it.flavors.carne ? `${it.flavors.carne} carne` : null,
+                    it.flavors.jyq ? `${it.flavors.jyq} jamón y queso` : null,
+                  ].filter(Boolean).join(' · ')
+                : null;
+              return (
+                <li key={it.comboId}>
+                  · {c.name} × {it.quantity}
+                  {flavorLine && <span className="text-ink-soft"> ({flavorLine})</span>}
+                </li>
+              );
             })}
           </ul>
         </div>

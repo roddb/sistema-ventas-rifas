@@ -50,9 +50,9 @@ export default function ProductSplitHero({
             aria-label="Comprar combo de comida"
           >
             <UtensilsCrossed className="h-7 w-7 text-ink-soft" aria-hidden />
-            <div className="text-sm font-bold text-ink">Combo evento</div>
-            <div className="text-xs text-ink-muted">3 opciones</div>
-            <div className="text-lg font-black text-ink">${Math.min(...COMBOS.map((c) => c.price)).toLocaleString('es-AR')}</div>
+            <div className="text-sm font-bold text-ink">{COMBOS[0].name}</div>
+            <div className="text-xs text-ink-muted">{COMBOS[0].description}</div>
+            <div className="text-lg font-black text-ink">${COMBOS[0].price.toLocaleString('es-AR')}</div>
           </button>
         </div>
       </main>

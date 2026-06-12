@@ -11,9 +11,9 @@ interface CrossSellSheetProps {
 export default function CrossSellSheet({ open, onClose, productSold, onAccept, onDecline }: CrossSellSheetProps) {
   if (!open) return null;
 
-  const otherProduct = productSold === 'rifa' ? 'combos del evento' : 'números de la rifa';
-  const otherEmoji = productSold === 'rifa' ? '🥪' : '🎟️';
-  const otherCta = productSold === 'rifa' ? 'Sí, ver combos' : 'Sí, ver rifa';
+  const otherProduct = productSold === 'rifa' ? 'el combo de empanadas' : 'números de la rifa';
+  const otherEmoji = productSold === 'rifa' ? '🥟' : '🎟️';
+  const otherCta = productSold === 'rifa' ? 'Sí, ver combo' : 'Sí, ver rifa';
 
   return (
     <>

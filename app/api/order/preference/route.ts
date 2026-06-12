@@ -40,12 +40,24 @@ export async function POST(req: NextRequest) {
       const [comboPurchase] = await db.select().from(schema.comboPurchases).where(eq(schema.comboPurchases.orderId, orderId)).limit(1);
       if (!comboPurchase) throw new Error(`Combo child not found for order ${orderId}`);
       const items = await db.select().from(schema.comboPurchaseItems).where(eq(schema.comboPurchaseItems.comboPurchaseId, comboPurchase.id));
-      comboData = items.map((it: { comboId: string; comboNameSnapshot: string; quantity: number; unitPrice: number }) => ({
-        id: it.comboId,
-        name: `${it.comboNameSnapshot} (combo)`,
-        quantity: it.quantity,
-        unitPrice: it.unitPrice,
-      }));
+      comboData = items.map((it: { comboId: string; comboNameSnapshot: string; quantity: number; unitPrice: number; flavorBreakdown: string | null }) => {
+        let name = `${it.comboNameSnapshot} (combo)`;
+        if (it.flavorBreakdown) {
+          try {
+            const f = JSON.parse(it.flavorBreakdown) as { carne?: number; jyq?: number };
+            const parts: string[] = [];
+            if (f.carne) parts.push(`${f.carne} carne`);
+            if (f.jyq) parts.push(`${f.jyq} j&q`);
+            if (parts.length) name = `${it.comboNameSnapshot} — ${parts.join(' / ')}`;
+          } catch { /* fallback al name base */ }
+        }
+        return {
+          id: it.comboId,
+          name,
+          quantity: it.quantity,
+          unitPrice: it.unitPrice,
+        };
+      });
     }
 
     const preference = await createOrderPreference({

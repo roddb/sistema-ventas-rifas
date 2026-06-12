@@ -1,0 +1,1 @@
+ALTER TABLE `combo_purchase_items` ADD `flavor_breakdown` text;

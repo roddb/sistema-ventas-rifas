@@ -13,8 +13,8 @@ import UnifiedReview from './UnifiedReview';
 import OrderSuccessScreen from './OrderSuccessScreen';
 import FailureScreen from '../status/FailureScreen';
 import PendingScreen from '../status/PendingScreen';
-import type { CartItem } from '../../lib/combos';
-import { calculateTotal } from '../../lib/combos';
+import type { CartItem, FlavorBreakdown, FlavorId } from '../../lib/combos';
+import { calculateTotal, isFlavorBreakdownValid, empanadasForCombos } from '../../lib/combos';
 import type { RaffleNumber } from '../RifasApp';
 
 type View = 'rifa-grid' | 'combo-catalog' | 'cross-sell' | 'form' | 'review' | 'success' | 'failure' | 'pending';
@@ -40,8 +40,10 @@ export default function OrderFlow(props: OrderFlowProps) {
   // Raffle numbers (array of number values)
   const [selectedNumbers, setSelectedNumbers] = useState<number[]>([]);
 
-  // Combo cart: Record<comboId, quantity> for ComboCatalog compat + CartItem[] for review/cart
-  const [combosCart, setCombosCart] = useState<Record<string, number>>({});
+  // Combo de empanadas (único combo de la sede 2): cantidad de combos + reparto de gustos.
+  // N combos → N×2 empanadas que se reparten exactamente entre carne y jamón y queso.
+  const [comboCount, setComboCount] = useState(0);
+  const [empanadaFlavors, setEmpanadaFlavors] = useState<FlavorBreakdown>({ carne: 0, jyq: 0 });
 
   const [cartOpen, setCartOpen] = useState(false);
   const [crossSellShown, setCrossSellShown] = useState(false);
@@ -50,13 +52,15 @@ export default function OrderFlow(props: OrderFlowProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Derived: CartItem[] from combosCart
-  const selectedCombos: CartItem[] = Object.entries(combosCart)
-    .filter(([, qty]) => qty > 0)
-    .map(([comboId, quantity]) => ({ comboId, quantity }));
+  // Derived: CartItem[] (un único item de empanadas con su desglose de gustos)
+  const selectedCombos: CartItem[] = comboCount > 0
+    ? [{ comboId: 'empanadas', quantity: comboCount, flavors: empanadaFlavors }]
+    : [];
 
   const hasRaffle = selectedNumbers.length > 0;
   const hasCombos = selectedCombos.length > 0;
+  // Los gustos están completos si no hay combos, o si el reparto suma exactamente N×2.
+  const combosComplete = comboCount === 0 || isFlavorBreakdownValid(comboCount, empanadaFlavors);
   const raffleCost = props.raffleConfig.pricePerNumber * selectedNumbers.length;
   const total = raffleCost + calculateTotal(selectedCombos);
   const itemCount = selectedNumbers.length + selectedCombos.reduce((s, it) => s + it.quantity, 0);
@@ -71,6 +75,8 @@ export default function OrderFlow(props: OrderFlowProps) {
   // === Handlers ===
 
   const handleContinueFromSelection = () => {
+    // No avanzar si el reparto de gustos de empanadas no cierra exacto.
+    if (!combosComplete) return;
     // Show cross-sell only once, only when user has exactly 1 product type
     if (!crossSellShown && (
       (view === 'rifa-grid' && hasRaffle && !hasCombos) ||
@@ -139,7 +145,8 @@ export default function OrderFlow(props: OrderFlowProps) {
 
   const handleRestart = () => {
     setSelectedNumbers([]);
-    setCombosCart({});
+    setComboCount(0);
+    setEmpanadaFlavors({ carne: 0, jyq: 0 });
     setCrossSellShown(false);
     setOrderId(undefined);
     setError(null);
@@ -151,19 +158,34 @@ export default function OrderFlow(props: OrderFlowProps) {
     setSelectedNumbers((curr) => curr.filter((x) => x !== n));
   };
 
-  const handleComboQuantity = (comboId: string, delta: number) => {
-    setCombosCart((curr) => {
-      const newQty = Math.max(1, (curr[comboId] ?? 1) + delta);
-      return { ...curr, [comboId]: newQty };
+  const handleChangeCombo = (delta: number) => {
+    const next = Math.max(0, comboCount + delta);
+    setComboCount(next);
+    // Si bajás la cantidad de combos y los gustos ya asignados exceden el nuevo
+    // total de empanadas, recortá el excedente (primero jamón y queso, luego carne).
+    const maxEmp = empanadasForCombos(next);
+    setEmpanadaFlavors((f) => {
+      let { carne, jyq } = f;
+      let sum = carne + jyq;
+      while (sum > maxEmp && jyq > 0) { jyq--; sum--; }
+      while (sum > maxEmp && carne > 0) { carne--; sum--; }
+      return carne === f.carne && jyq === f.jyq ? f : { carne, jyq };
     });
   };
 
-  const handleRemoveCombo = (comboId: string) => {
-    setCombosCart((curr) => {
-      const next = { ...curr };
-      delete next[comboId];
-      return next;
+  const handleChangeFlavor = (flavorId: FlavorId, delta: number) => {
+    setEmpanadaFlavors((f) => {
+      const maxEmp = empanadasForCombos(comboCount);
+      const sum = f.carne + f.jyq;
+      if (delta > 0 && sum >= maxEmp) return f; // no exceder N×2
+      const nextVal = Math.max(0, f[flavorId] + delta);
+      return { ...f, [flavorId]: nextVal };
     });
+  };
+
+  const handleRemoveCombo = () => {
+    setComboCount(0);
+    setEmpanadaFlavors({ carne: 0, jyq: 0 });
   };
 
   const handleBack = () => {
@@ -227,19 +249,10 @@ export default function OrderFlow(props: OrderFlowProps) {
 
       {view === 'combo-catalog' && (
         <ComboCatalog
-          cart={combosCart}
-          onChangeQuantity={(comboId, delta) => {
-            setCombosCart((curr) => {
-              const current = curr[comboId] ?? 0;
-              const next = Math.max(0, current + delta);
-              if (next === 0) {
-                const updated = { ...curr };
-                delete updated[comboId];
-                return updated;
-              }
-              return { ...curr, [comboId]: next };
-            });
-          }}
+          comboCount={comboCount}
+          flavors={empanadaFlavors}
+          onChangeCombo={handleChangeCombo}
+          onChangeFlavor={handleChangeFlavor}
           onContinue={handleContinueFromSelection}
           onBack={handleBack}
         />
@@ -306,8 +319,8 @@ export default function OrderFlow(props: OrderFlowProps) {
           itemCount={itemCount}
           total={total}
           onTap={() => setCartOpen(true)}
-          ctaLabel={(view === 'rifa-grid' || view === 'combo-catalog') ? 'Continuar' : undefined}
-          onCta={(view === 'rifa-grid' || view === 'combo-catalog') ? handleContinueFromSelection : undefined}
+          ctaLabel={(view === 'rifa-grid' || (view === 'combo-catalog' && combosComplete)) ? 'Continuar' : undefined}
+          onCta={(view === 'rifa-grid' || (view === 'combo-catalog' && combosComplete)) ? handleContinueFromSelection : undefined}
         />
       )}
 
@@ -319,7 +332,6 @@ export default function OrderFlow(props: OrderFlowProps) {
         pricePerNumber={props.raffleConfig.pricePerNumber}
         total={total}
         onRemoveNumber={handleRemoveNumber}
-        onComboQuantityChange={handleComboQuantity}
         onRemoveCombo={handleRemoveCombo}
       />
 
