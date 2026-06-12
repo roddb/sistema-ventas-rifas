@@ -37,7 +37,7 @@ export type Step = 'hero' | 'grid' | 'form' | 'review' | 'success' | 'failure' |
 
 const POLLING_INTERVAL_MS = 30000;
 
-// Sede 2: cierre automático de ventas online el domingo 6/7/2026 a las 23:59 ART.
+// Sede 2: cierre automático de ventas online el lunes 6/7/2026 a las 23:59 ART.
 // Hard gate client-side (igual que sede 1): aparece aunque la API esté caída.
 // El soft gate `is_active` (UPDATE manual en BD) sigue siendo la segunda defensa.
 const SALES_CLOSE_TS = new Date('2026-07-06T23:59:00-03:00').getTime();
