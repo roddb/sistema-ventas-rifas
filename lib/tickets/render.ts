@@ -17,32 +17,36 @@ function padNumber(n: number): string {
 
 function abbreviateCombo(name: string): string {
   const trimmed = name.trim();
-  const lower = trimmed.toLowerCase();
-  if (lower === 'sandwich de carne') return 'S. carne';
-  if (lower === 'sandwich de chorizo') return 'S. chorizo';
-  if (lower === '3 empanadas') return '3 empanadas';
+  if (trimmed.toLowerCase() === 'combo de empanadas') return 'Empanadas';
   return trimmed;
 }
 
+function renderFlavorChip(label: string, count: number): string {
+  return `<span class="chk-item combo"><span class="chk combo"></span>${escapeHtml(label)} ×${count}</span>`;
+}
+
 function renderFamiliaBlock(family: FamilyIdentity): string {
-  const apellido = escapeHtml(family.buyerName.trim());
+  const adulto = escapeHtml(family.buyerName.trim());
+  // 12.3: el ALUMNO va primero (+ curso); el adulto comprador, al lado.
   if (family.studentName && family.studentName.trim()) {
     let curso = '';
     if (family.course && family.division) {
-      curso = ` · ${escapeHtml(family.course)}° ${escapeHtml(family.division)}`;
+      curso = `${escapeHtml(family.course)}° ${escapeHtml(family.division)}`;
     } else if (family.course) {
-      curso = ` · ${escapeHtml(family.course)}°`;
+      curso = `${escapeHtml(family.course)}°`;
     }
     return `
-      <span class="p-familia">${apellido}</span>
+      <span class="p-alumno">${escapeHtml(family.studentName.trim())}</span>
+      ${curso ? `<span class="p-curso">${curso}</span>` : ''}
       <span class="p-sep">·</span>
-      <span class="p-student">${escapeHtml(family.studentName.trim())}${curso}</span>
+      <span class="p-adulto"><span class="lbl">compró:</span> ${adulto}</span>
     `;
   }
+  // Order sin alumno (solo combos): el adulto pasa a ser el foco.
   return `
-    <span class="p-familia">${apellido}</span>
+    <span class="p-alumno">${adulto}</span>
     <span class="p-sep">·</span>
-    <span class="p-student muted">(solo combos)</span>
+    <span class="p-adulto muted">(solo combos)</span>
   `;
 }
 
@@ -62,11 +66,19 @@ function renderPapel(data: OrderTicketData): string {
 
   const rifaChips = data.rifas.map((r) => renderRifaChip(r.number)).join('');
   const comboChips = data.combos
-    .map((combo) =>
-      Array.from({ length: combo.quantity }, (_, i) =>
+    .map((combo) => {
+      // Combo de empanadas: un chip por gusto (Carne ×3 / J. y queso ×1).
+      if (combo.comboId === 'empanadas' && combo.flavors) {
+        const chips: string[] = [];
+        if (combo.flavors.carne > 0) chips.push(renderFlavorChip('Carne', combo.flavors.carne));
+        if (combo.flavors.jyq > 0) chips.push(renderFlavorChip('J. y queso', combo.flavors.jyq));
+        return chips.join('');
+      }
+      // Otros combos (legacy): un chip por unidad.
+      return Array.from({ length: combo.quantity }, (_, i) =>
         renderComboChip(combo, i + 1, combo.quantity)
-      ).join('')
-    )
+      ).join('');
+    })
     .join('');
 
   const rifaGroup = totalNums > 0

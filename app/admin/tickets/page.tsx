@@ -40,9 +40,9 @@ export default async function AdminTicketsPage() {
         <table style={styles.table}>
           <thead>
             <tr>
-              <th style={styles.th}>Apellido</th>
               <th style={styles.th}>Alumno/a</th>
               <th style={styles.th}>Curso</th>
+              <th style={styles.th}>Adulto (comprador)</th>
               <th style={styles.thNum}>#Rifa</th>
               <th style={styles.thNum}>#Combos</th>
               <th style={styles.th}>Acción</th>
@@ -51,9 +51,9 @@ export default async function AdminTicketsPage() {
           <tbody>
             {rows.map((row) => (
               <tr key={row.orderId} style={styles.tr}>
-                <td style={styles.td}>{row.buyerName}</td>
                 <td style={styles.td}>{row.studentName ?? <span style={styles.muted}>—</span>}</td>
                 <td style={styles.td}>{formatCurso(row)}</td>
+                <td style={styles.td}>{row.buyerName}</td>
                 <td style={styles.tdNum}>{row.numCount || ''}</td>
                 <td style={styles.tdNum}>{row.comboUnitsCount || ''}</td>
                 <td style={styles.td}>

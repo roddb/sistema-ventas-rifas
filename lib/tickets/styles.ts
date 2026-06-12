@@ -84,22 +84,31 @@ html, body {
   flex-wrap: wrap;
 }
 
-.p-familia {
+/* Alumno = foco del ticket (destacado). Adulto comprador = secundario al lado. */
+.p-alumno {
   font-family: 'EB Garamond', Georgia, serif;
   font-size: 13pt;
   font-weight: 700;
   color: var(--sta-azul);
   letter-spacing: 0.3px;
+}
+
+.p-curso {
+  font-size: 9pt;
+  font-weight: 700;
+  color: var(--sta-dorado-oscuro);
   white-space: nowrap;
 }
 
 .p-sep { color: var(--sta-texto-sec); font-size: 10pt; }
 
-.p-student {
-  font-size: 9.5pt;
-  color: var(--sta-texto);
+.p-adulto {
+  font-size: 9pt;
+  color: var(--sta-texto-sec);
   font-weight: 500;
+  white-space: nowrap;
 }
+.p-adulto .lbl { font-style: italic; color: var(--sta-texto-sec); }
 
 .p-side {
   display: flex;

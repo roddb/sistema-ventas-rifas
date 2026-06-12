@@ -18,6 +18,18 @@ export interface ComboTicket {
   comboId: string;
   comboNameSnapshot: string;
   quantity: number;
+  // Desglose de gustos del combo de empanadas (null para combos sin gustos).
+  flavors: { carne: number; jyq: number } | null;
+}
+
+function parseFlavors(raw: string | null): { carne: number; jyq: number } | null {
+  if (!raw) return null;
+  try {
+    const f = JSON.parse(raw) as { carne?: number; jyq?: number };
+    return { carne: Number(f.carne ?? 0), jyq: Number(f.jyq ?? 0) };
+  } catch {
+    return null;
+  }
 }
 
 export interface OrderTicketData {
@@ -38,11 +50,12 @@ export interface TicketsSummaryRow {
 }
 
 export async function getAllApprovedOrderIds(): Promise<string[]> {
+  // 12.3: ordenado por alumno (el ticket lleva al alumno primero).
   const rows = await db
     .select({ id: orders.id })
     .from(orders)
     .where(eq(orders.paymentStatus, 'approved'))
-    .orderBy(asc(orders.buyerName));
+    .orderBy(asc(orders.studentName), asc(orders.buyerName));
   return rows.map((r: { id: string }) => r.id);
 }
 
@@ -74,6 +87,7 @@ export async function getOrderForTicket(orderId: string): Promise<OrderTicketDat
         comboId: comboPurchaseItems.comboId,
         comboNameSnapshot: comboPurchaseItems.comboNameSnapshot,
         quantity: comboPurchaseItems.quantity,
+        flavorBreakdown: comboPurchaseItems.flavorBreakdown,
       })
       .from(comboPurchases)
       .innerJoin(comboPurchaseItems, eq(comboPurchaseItems.comboPurchaseId, comboPurchases.id))
@@ -93,10 +107,11 @@ export async function getOrderForTicket(orderId: string): Promise<OrderTicketDat
       division: orderRow.division,
     },
     rifas: rifaRows.map((r: { number: number }) => ({ number: r.number })),
-    combos: comboRows.map((c: { comboId: string; comboNameSnapshot: string; quantity: number }) => ({
+    combos: comboRows.map((c: { comboId: string; comboNameSnapshot: string; quantity: number; flavorBreakdown: string | null }) => ({
       comboId: c.comboId,
       comboNameSnapshot: c.comboNameSnapshot,
       quantity: c.quantity,
+      flavors: parseFlavors(c.flavorBreakdown),
     })),
   };
 }
@@ -112,7 +127,7 @@ export async function getAdminTicketsSummary(): Promise<TicketsSummaryRow[]> {
     })
     .from(orders)
     .where(eq(orders.paymentStatus, 'approved'))
-    .orderBy(asc(orders.buyerName));
+    .orderBy(asc(orders.studentName), asc(orders.buyerName));
 
   if (orderRows.length === 0) return [];
 
