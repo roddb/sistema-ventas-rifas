@@ -3,7 +3,7 @@
 ## Proyecto: Sistema de Ventas de Rifas Escolares
 ## Repositorio: https://github.com/roddb/sistema-ventas-rifas
 ## Producción: https://sistema-ventas-rifas-kc5dasqukq-ue.a.run.app (Cloud Run, us-east1)
-## Último save: 2026-06-09 — Save #13 (Reset BD + reapertura para sede 2 + planificación Fase 12)
+## Último save: 2026-06-12 — Save #14 (Fase 12.1 + 12.2 + 12.3: combo empanadas con gustos, cierre 6/7, tickets alumno-primero)
 
 ---
 
@@ -225,6 +225,16 @@ Rifa cerrada en octubre 2025. Datos reales (extraídos de la BD el 2026-05-04 an
 ---
 
 ## Historial de Sesiones
+
+### Sesión 14 — 2026-06-12 (Save #14 — Fase 12.1 + 12.2 + 12.3)
+- **Resumen**: Implementación, validación y deploy de los cambios de la sede 2 pedidos por los directores. Combo de empanadas con selección de gustos (la tarea más grande), cierre automático y rediseño de tickets. App quedó lista para difundir.
+- **Logros**:
+  - **12.2 — Combo de empanadas $12.000 con gustos** (deployado): catálogo reducido a un único combo (sandwiches eliminados); el comprador elige N combos y reparte exactamente N×2 empanadas entre Carne y Jamón y queso (steppers de suma exacta, botón bloqueado hasta cuadrar). Schema: columna additive `flavor_breakdown` (JSON) en `combo_purchase_items` — se eligió JSON sobre "fila por gusto" para no tocar la semántica `quantity`=combos / `unitPrice`=$12.000 y dejar el flujo de pago intacto. Tocó `lib/combos.ts`, `ComboCatalog` (reescrito como picker), `OrderFlow`, `CartDrawer`, `UnifiedReview`, `OrderSuccessScreen`, `ProductSplitHero`, `CrossSellSheet`, `orderService.createOrder`, Zod route, preference MP, CSV de cocina. Revisado por `db-migration-reviewer` + `payment-flow-debugger`. Validado E2E local + smoke prod (inspección URLs preference — BUG-010 OK).
+  - **12.1 — Cierre automático lunes 6/7 23:59 ART** (deployado): reintroducido `SALES_CLOSE_TS` + hard gate en `RifasApp.tsx`. (Cambió de 30/6 a 6/7 a mitad de sesión por pedido del usuario; verificado en el bundle de prod.)
+  - **12.3 — Tickets alumno-primero** (local-only): bloque de identidad invertido (alumno destacado + curso, "compró: <adulto>"), orden por `studentName`, combos con desglose de gustos. Validado con render mock vía Chrome headless (4 casos).
+  - Deploys: revisions `00022-hzf` (12.1+12.2) y `00023-zxz` (fecha 6/7). 5 commits a main.
+- **Problemas encontrados**: ninguno (sin bugs nuevos). El order de prueba `ORD-RZh5Xh9_cr` del usuario quedó cancelado en BD por decisión suya — confirmó que el cron de timeout y la persistencia de gustos funcionan en prod.
+- **Estado al cerrar**: producción en `00023-zxz`, rifa sede 2 abierta, 2000 disponibles, 0 ventas approved. Pendiente: 12.4 (talonario de no vendidas — espera medidas + lema) y compra real E2E con un tercero.
 
 ### Sesión 12 — 2026-05-27 (Cierre rifa + 4 entregables jefa + bingo rehosting + rebranding v2)
 - **Duración aproximada**: ~3.5h efectivas (de ~23:30 ART del 26/05 a ~03:00 ART del 27/05).
